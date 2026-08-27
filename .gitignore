@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+*.egg-info/
+
+# Flask
+instance/*.db
+instance/config.py
+
+# ML models
+ml_training/saved_models/*.pkl
+ml_training/data/raw/*
+ml_training/data/labeled/*
+!ml_training/data/raw/.gitkeep
+!ml_training/data/labeled/.gitkeep
+
+# Uploads
+app/static/uploads/*
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# OS
+.DS_Store

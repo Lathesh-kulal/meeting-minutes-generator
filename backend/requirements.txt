@@ -1,0 +1,32 @@
+# --- Web framework ---
+Flask==3.0.3
+Flask-SQLAlchemy==3.1.1
+Flask-Login==0.6.3
+Flask-Cors==4.0.1
+Flask-Executor==1.0.0
+
+# --- ASR (speech-to-text) ---
+openai-whisper==20231117
+
+# --- NLP / Summarization / ML ---
+transformers==4.44.2
+torch==2.4.1
+sentencepiece==0.2.0
+sentence-transformers==3.0.1
+nltk==3.9.1
+spacy==3.7.6
+scikit-learn==1.5.1
+pandas==2.2.2
+numpy==1.26.4
+
+# --- Audio handling ---
+pydub==0.25.1
+ffmpeg-python==0.2.0
+
+# --- Document export ---
+python-docx==1.1.2
+WeasyPrint==62.3
+
+# --- Utilities ---
+python-dotenv==1.0.1
+joblib==1.4.2
