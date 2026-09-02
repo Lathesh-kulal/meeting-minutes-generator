@@ -25,6 +25,14 @@ examples (both negative — conversational framing — and positive — spoken-
 style task assignments) is merged in alongside the primary dataset:
     ml_training/data/raw/meeting_discourse_augmentation.tsv
 
+Because this supplementary set is much smaller than the primary dataset
+(~50 vs ~2,700 examples), each augmentation example is duplicated
+(oversampled) a configurable number of times so it carries meaningful
+weight during training, rather than being statistically drowned out.
+Oversampled duplicates are added ONLY to the training split, never to the
+test split — otherwise the model would be evaluated on data it had
+memorized, which would inflate test accuracy dishonestly.
+
 Usage:
     1. Download the raw "dataset" file from the link above (click "Download
        raw file" on GitHub) and save it as:
@@ -48,6 +56,11 @@ _TEST_PATH = os.path.join(_LABELED_DIR, "test.csv")
 
 _TEST_FRACTION = 0.2
 _RANDOM_SEED = 42
+
+# How many times each augmentation example is duplicated in the training
+# set. Tuned so the augmentation carries meaningful weight against the much
+# larger base dataset without overwhelming it.
+_AUGMENTATION_OVERSAMPLE_FACTOR = 15
 
 
 def _load_raw_rows(path: str) -> list[tuple[str, int]]:
@@ -98,35 +111,40 @@ def prepare_dataset():
             "and save it there first."
         )
 
-    rows = _load_raw_rows(_RAW_PATH)
-    if not rows:
+    base_rows = _load_raw_rows(_RAW_PATH)
+    if not base_rows:
         raise ValueError("No valid rows parsed from the raw dataset file.")
 
-    base_count = len(rows)
+    # Split the BASE dataset only, so test metrics reflect genuine
+    # generalization on the original distribution.
+    random.seed(_RANDOM_SEED)
+    shuffled_base = base_rows[:]
+    random.shuffle(shuffled_base)
+    split_index = int(len(shuffled_base) * (1 - _TEST_FRACTION))
+    train_rows = shuffled_base[:split_index]
+    test_rows = shuffled_base[split_index:]
 
+    print(f"Base dataset: {len(base_rows)} statements "
+          f"({sum(1 for _, l in base_rows if l == 1)} action items, "
+          f"{sum(1 for _, l in base_rows if l == 0)} non-action-items).")
+
+    # Augmentation examples are added only to the training split, oversampled.
     if os.path.exists(_AUGMENTATION_PATH):
         aug_rows = _load_raw_rows(_AUGMENTATION_PATH)
-        seen_texts = {text for text, _ in rows}
-        new_aug_rows = [r for r in aug_rows if r[0] not in seen_texts]
-        rows.extend(new_aug_rows)
-        print(f"Merged in {len(new_aug_rows)} meeting-discourse augmentation examples "
-              f"from {_AUGMENTATION_PATH}.")
+        base_texts = {text for text, _ in base_rows}
+        new_aug_rows = [r for r in aug_rows if r[0] not in base_texts]
+
+        oversampled_aug = new_aug_rows * _AUGMENTATION_OVERSAMPLE_FACTOR
+        train_rows = train_rows + oversampled_aug
+        random.shuffle(train_rows)
+
+        print(f"Merged in {len(new_aug_rows)} meeting-discourse augmentation examples, "
+              f"oversampled {_AUGMENTATION_OVERSAMPLE_FACTOR}x "
+              f"({len(oversampled_aug)} total added to training set only).")
     else:
         print(f"No augmentation file found at {_AUGMENTATION_PATH} — using base dataset only.")
 
-    positives = [r for r in rows if r[1] == 1]
-    negatives = [r for r in rows if r[1] == 0]
-
-    print(f"Loaded {len(rows)} total labeled statements "
-          f"({base_count} from base dataset, {len(rows) - base_count} from augmentation) — "
-          f"{len(positives)} action items, {len(negatives)} non-action-items.")
-
-    random.seed(_RANDOM_SEED)
-    random.shuffle(rows)
-
-    split_index = int(len(rows) * (1 - _TEST_FRACTION))
-    train_rows = rows[:split_index]
-    test_rows = rows[split_index:]
+    print(f"Final split: {len(train_rows)} training rows, {len(test_rows)} test rows.")
 
     _write_csv(_TRAIN_PATH, train_rows)
     _write_csv(_TEST_PATH, test_rows)

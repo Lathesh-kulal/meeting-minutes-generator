@@ -1,27 +1,37 @@
 # Python
-__pycache__/
-*.pyc
-venv/
-*.egg-info/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/**/*.pyc
+backend/venv/
+backend/*.egg-info/
 
 # Flask
-instance/*.db
-instance/config.py
+backend/instance/*.db
+backend/instance/config.py
 
-# ML models
-ml_training/saved_models/*.pkl
-ml_training/data/raw/*
-ml_training/data/labeled/*
-!ml_training/data/raw/.gitkeep
-!ml_training/data/labeled/.gitkeep
+# ML training — generated/derived files only.
+# Raw labeled source data (action_items_dataset.tsv,
+# meeting_discourse_augmentation.tsv) is intentionally tracked for
+# reproducibility.
+backend/ml_training/saved_models/*.pkl
+backend/ml_training/data/labeled/*.csv
+
+# Test audio/video files (personal recordings, not project source)
+backend/*.mp3
+backend/*.wav
+backend/*.mpeg
+backend/*.mp4
+backend/*.m4a
 
 # Uploads
-app/static/uploads/*
+backend/app/static/uploads/*
 
-# Node
-node_modules/
-dist/
-.vite/
+# Node / React
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
 
 # OS
 .DS_Store
+Thumbs.db
