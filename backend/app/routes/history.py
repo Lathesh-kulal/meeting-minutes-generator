@@ -1,13 +1,15 @@
 """
 history.py
-GET /api/meetings — list all past meetings (requires auth if enabled).
+GET /api/meetings — list all past meetings (most recent first).
 """
 from flask import Blueprint, jsonify
+
+from ..models import Meeting
 
 history_bp = Blueprint("history", __name__)
 
 
 @history_bp.route("/api/meetings", methods=["GET"])
 def list_meetings():
-    # TODO: query DB, return jsonify(list of meetings)
-    return jsonify({"message": "not implemented"}), 501
+    meetings = Meeting.query.order_by(Meeting.created_at.desc()).all()
+    return jsonify([m.to_dict(include_full_result=False) for m in meetings])
