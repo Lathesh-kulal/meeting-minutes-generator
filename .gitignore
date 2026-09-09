@@ -35,3 +35,9 @@ frontend/.vite/
 # OS
 .DS_Store
 Thumbs.db
+# Local test outputs (generated during manual testing, not source)
+backend/test.pdf
+backend/output.docx
+backend/output.pdf
+backend/*.docx
+backend/*.pdf
