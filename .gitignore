@@ -41,3 +41,5 @@ backend/output.docx
 backend/output.pdf
 backend/*.docx
 backend/*.pdf
+# Graphify code-graph tool output
+graphify-out/
