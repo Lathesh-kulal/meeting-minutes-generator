@@ -13,6 +13,7 @@ from werkzeug.utils import secure_filename
 from ..extensions import db, executor
 from ..models import Meeting
 from pipeline.pipeline_runner import run_pipeline
+from flask_login import login_required, current_user
 
 upload_bp = Blueprint("upload", __name__)
 
@@ -40,8 +41,8 @@ def _process_meeting(app, meeting_id: int, audio_path: str | None, raw_text: str
                 except OSError:
                     pass
 
-
 @upload_bp.route("/api/meetings", methods=["POST"])
+@login_required
 def create_meeting():
     title = request.form.get("title") or request.args.get("title")
     raw_text = request.form.get("text")
@@ -57,7 +58,7 @@ def create_meeting():
         audio_path = os.path.join(current_app.config["UPLOAD_FOLDER"], unique_name)
         audio_file.save(audio_path)
 
-    meeting = Meeting(title=title or "Untitled Meeting", status="processing")
+    meeting = Meeting(title=title or "Untitled Meeting", status="processing", user_id=current_user.id)
     db.session.add(meeting)
     db.session.commit()
 

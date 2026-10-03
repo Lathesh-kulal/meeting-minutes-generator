@@ -12,6 +12,7 @@ from ..extensions import db
 from ..models import Meeting
 from exports import pdf_export, docx_export
 from pipeline import translate
+from flask_login import login_required, current_user
 
 export_bp = Blueprint("export", __name__)
 
@@ -22,6 +23,7 @@ _MIME_TYPES = {
 
 
 @export_bp.route("/api/meetings/<int:meeting_id>/export", methods=["GET"])
+@login_required
 def export_meeting(meeting_id):
     fmt = request.args.get("format", "pdf").lower()
     lang = request.args.get("lang", "en")
@@ -29,7 +31,7 @@ def export_meeting(meeting_id):
     if fmt not in _MIME_TYPES:
         return jsonify({"error": f"Unsupported format '{fmt}'. Use 'pdf' or 'docx'."}), 400
 
-    meeting = db.session.get(Meeting, meeting_id)
+    meeting = Meeting.query.filter_by(id=meeting_id, user_id=current_user.id).first()
     if meeting is None:
         return jsonify({"error": "Meeting not found."}), 404
     if meeting.status != "done":
