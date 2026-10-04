@@ -108,7 +108,7 @@ def translate_result(meeting_data: dict, lang: str) -> dict:
     if chapters:
         titles = [ch.get("title", "") for ch in chapters]
         summaries = [ch.get("summary", "") for ch in chapters]
-        translated_titles = _translate_batch(titles, lang)
+        translated_titles = _translate_titles(titles, lang)
         translated_summaries = _translate_batch(summaries, lang)
 
         result["chapters"] = [
@@ -127,6 +127,33 @@ def translate_result(meeting_data: dict, lang: str) -> dict:
         ]
 
     return result
+def _split_title(title: str) -> list[str]:
+    """Splits a chapter title into its individual noun-phrase fragments.
+    Titles are built by joining fragments with " & " (see summarize.py's
+    _make_title); translating each fragment separately, rather than the
+    whole joined string, avoids a trailing-artifact bug where OPUS-MT
+    sometimes appends junk (e.g. a stray "(c)") to short, unnatural,
+    ampersand-joined inputs it wasn't trained on."""
+    return [part.strip() for part in title.split(" & ") if part.strip()]
+
+
+def _translate_titles(titles: list[str], lang: str) -> list[str]:
+    """Translates chapter titles fragment-by-fragment (see _split_title),
+    then rejoins each title's fragments with " & "."""
+    if not titles:
+        return titles
+
+    fragments_per_title = [_split_title(t) for t in titles]
+    all_fragments = [frag for frags in fragments_per_title for frag in frags]
+    translated_fragments = _translate_batch(all_fragments, lang)
+
+    output = []
+    cursor = 0
+    for frags in fragments_per_title:
+        n = len(frags)
+        output.append(" & ".join(translated_fragments[cursor:cursor + n]))
+        cursor += n
+    return output
 
 
 if __name__ == "__main__":
