@@ -25,6 +25,8 @@ token instead — see the "te" entry for the pattern to follow.
 """
 
 from transformers import pipeline
+from ner_utils import find_person_names
+import re
 
 # Each entry: model name, and an optional prefix token some multilingual
 # OPUS-MT models require prepended to the source text to select the target
@@ -77,7 +79,49 @@ def _translate_batch(texts: list[str], lang: str) -> list[str]:
     for idx, translated in zip(non_empty_indices, translated_texts):
         output[idx] = translated
     return output
+def _split_on_names(text: str, names: list[str]) -> list[str]:
+    """Splits text around each detected name, keeping the names themselves
+    as separate elements. Result alternates [text, name, text, name, ...] —
+    even indices are ordinary text, odd indices are names, so parity alone
+    tells you which is which."""
+    if not names:
+        return [text]
+    sorted_names = sorted(set(names), key=len, reverse=True)
+    pattern = "(" + "|".join(re.escape(n) for n in sorted_names) + ")"
+    return re.split(pattern, text)
 
+
+def _translate_texts_protecting_names(texts: list[str], lang: str) -> list[str]:
+    """Translates free text (highlights, chapter summaries, action-item
+    text) while protecting any person names found in it from being
+    translated. Names are detected via the same NER used for assignee
+    extraction, the text is split around each name, only the surrounding
+    fragments go through translation, and the original name is spliced
+    back in unchanged."""
+    if not texts:
+        return texts
+
+    split_per_text = [
+        _split_on_names(t, find_person_names(t) if t.strip() else [])
+        for t in texts
+    ]
+
+    to_translate = [
+        part for parts in split_per_text
+        for i, part in enumerate(parts) if i % 2 == 0
+    ]
+    translated = _translate_batch(to_translate, lang)
+    translated_iter = iter(translated)
+
+    output = []
+    for parts in split_per_text:
+        pieces = []
+        for i, part in enumerate(parts):
+            value = part if i % 2 == 1 else next(translated_iter)
+            if value:
+                pieces.append(value)
+        output.append(" ".join(pieces))
+    return output
 
 def translate_result(meeting_data: dict, lang: str) -> dict:
     """
@@ -102,14 +146,14 @@ def translate_result(meeting_data: dict, lang: str) -> dict:
     result = dict(meeting_data)  # shallow copy — we replace whole fields below, not mutate in place
 
     highlights = meeting_data.get("highlights") or []
-    result["highlights"] = _translate_batch(highlights, lang)
+    result["highlights"] = _translate_texts_protecting_names(highlights, lang)
 
     chapters = meeting_data.get("chapters") or []
     if chapters:
         titles = [ch.get("title", "") for ch in chapters]
         summaries = [ch.get("summary", "") for ch in chapters]
         translated_titles = _translate_titles(titles, lang)
-        translated_summaries = _translate_batch(summaries, lang)
+        translated_summaries = _translate_texts_protecting_names(summaries, lang)
 
         result["chapters"] = [
             {**ch, "title": translated_titles[i], "summary": translated_summaries[i]}
@@ -119,7 +163,7 @@ def translate_result(meeting_data: dict, lang: str) -> dict:
     action_items = meeting_data.get("action_items") or []
     if action_items:
         texts = [item.get("text", "") for item in action_items]
-        translated_texts = _translate_batch(texts, lang)
+        translated_texts = _translate_texts_protecting_names(texts, lang)
         # assigned_to, due_date, and method are intentionally left untouched
         result["action_items"] = [
             {**item, "text": translated_texts[i]}

@@ -112,6 +112,30 @@ def enrich_action_items(action_items: list[dict]) -> list[dict]:
             "due_date": entities["dates"][0] if entities["dates"] else None,
         })
     return enriched
+def find_person_names(text: str) -> list[str]:
+    """
+    Returns all distinct person names detected in text, in order of first
+    appearance — via spaCy NER (augmented with the gazetteer) plus the
+    structural regex fallback. Used by translate.py to protect names from
+    being mangled by translation (OPUS-MT sometimes "translates" proper
+    nouns along with the rest of the sentence, e.g. "Reha" becoming
+    "Reblant").
+    """
+    nlp = _get_nlp()
+    doc = nlp(text)
+    names = [ent.text for ent in doc.ents if ent.label_ == "PERSON"]
+    if not names:
+        fallback_name = _fallback_name_extraction(text)
+        if fallback_name:
+            names = [fallback_name]
+
+    seen = set()
+    unique_names = []
+    for n in names:
+        if n not in seen:
+            seen.add(n)
+            unique_names.append(n)
+    return unique_names
 
 
 if __name__ == "__main__":
