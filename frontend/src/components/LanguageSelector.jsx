@@ -4,6 +4,9 @@ const LANGUAGES = [
   { code: 'en', label: 'English' },
   { code: 'hi', label: 'Hindi' },
   { code: 'te', label: 'Telugu' },
+  { code: 'ml', label: 'Malayalam' },
+  { code: 'kn', label: 'Kannada' },
+  { code: 'ta', label: 'Tamil' },
   { code: 'es', label: 'Spanish' },
 ]
 
