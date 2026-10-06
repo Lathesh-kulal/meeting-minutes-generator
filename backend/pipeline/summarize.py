@@ -20,7 +20,10 @@ _nlp = None
 # chapter's opening lines, e.g. "thanks for joining today's meeting" — without
 # it, that greeting can out-rank the real topic on a word-count tie.)
 _STOP_PHRASES = {"it", "this", "that", "we", "they", "i", "you", "he", "she",
-                  "everyone", "someone", "thanks", "everything", "today"}
+                  "everyone", "someone", "thanks", "everything", "today",
+                  "guys", "lot", "stuff", "thing", "things", "kind", "sort",
+                  "bit", "anyone", "anything", "nothing", "no one"}
+
 _GENERIC_TIME_LEMMAS = {"week", "day", "month", "time", "minute", "hour", "year",
                          "monday", "tuesday", "wednesday", "thursday", "friday",
                          "saturday", "sunday"}
@@ -79,17 +82,24 @@ def _make_title(chapter_text: str, max_phrases: int = 2) -> str:
     def _overlaps_person(chunk) -> bool:
         return any(chunk.start_char < end and chunk.end_char > start for start, end in person_spans)
 
+    def _is_generic(lemma_or_text: str, generic_set: set) -> bool:
+        # Catches plural forms the lemmatizer doesn't reduce (e.g. "Fridays"
+        # not reducing to "friday") by also checking the word with a
+        # trailing "s" stripped.
+        return lemma_or_text in generic_set or lemma_or_text.rstrip("s") in generic_set
+
     counts: Counter = Counter()
     for chunk in doc.noun_chunks:
         if _overlaps_person(chunk):
             continue
         root_lemma = chunk.root.lemma_.lower()
-        if root_lemma in _GENERIC_TIME_LEMMAS or root_lemma in _GENERIC_MEETING_LEMMAS:
+        root_text = chunk.root.text.lower()
+        if _is_generic(root_lemma, _GENERIC_TIME_LEMMAS) or _is_generic(root_text, _GENERIC_TIME_LEMMAS):
+            continue
+        if _is_generic(root_lemma, _GENERIC_MEETING_LEMMAS) or _is_generic(root_text, _GENERIC_MEETING_LEMMAS):
             continue
         if chunk.root.pos_ == "PRON":
             continue
-        # also catch meeting-filler words appearing anywhere in the chunk,
-        # not just as its grammatical root (e.g. "today's meeting")
         if any(tok.lemma_.lower() in _GENERIC_MEETING_LEMMAS for tok in chunk):
             continue
 
@@ -103,12 +113,16 @@ def _make_title(chapter_text: str, max_phrases: int = 2) -> str:
             counts[phrase] += 1
 
     if not counts:
-        # No usable noun chunks (e.g. very short or unusual chapter text) —
-        # fall back to a plain truncation rather than failing.
         words = chapter_text.split()
         return " ".join(words[:6]).rstrip(".,;") or "Untitled Topic"
 
-    top_phrases = [phrase for phrase, _ in counts.most_common(max_phrases)]
+    multi_word = [(p, c) for p, c in counts.most_common() if len(p.split()) > 1]
+    single_word = [(p, c) for p, c in counts.most_common() if len(p.split()) == 1]
+
+    top_phrases = [p for p, _ in multi_word[:max_phrases]]
+    if len(top_phrases) < max_phrases:
+        top_phrases += [p for p, _ in single_word[:max_phrases - len(top_phrases)]]
+
     return " & ".join(phrase.title() for phrase in top_phrases)
 
 
@@ -150,9 +164,12 @@ def generate_highlights(full_text: str, num_highlights: int = 5) -> list[str]:
 
 if __name__ == "__main__":
     sample = (
-        "We discussed the Q3 budget first. The marketing team needs more funds "
-        "because the current allocation is not enough to cover the new campaign. "
-        "John will send the revised numbers by Friday so the finance team can review them."
+        "Hello everyone, thank you guys for coming to our weekly student success meeting. "
+        "And let's just get started. So I have our list of chronically absent students here "
+        "and I've been noticing a troubling trend. A lot of students are skipping on Fridays. "
+        "Does anyone have any idea what's going on? I've heard some of my mentees talking about "
+        "how it's really hard to get out of bed on Fridays. It might be good if we did something "
+        "like a pancake breakfast to encourage them to come. I think that's a great idea."
     )
     print(_safe_summarize(sample))
     print(_make_title(sample))

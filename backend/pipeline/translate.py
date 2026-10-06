@@ -25,7 +25,10 @@ token instead — see the "te" entry for the pattern to follow.
 """
 
 from transformers import pipeline
-from ner_utils import find_person_names
+try:
+    from pipeline.ner_utils import find_person_names
+except ImportError:
+    from ner_utils import find_person_names
 import re
 
 # Each entry: model name, and an optional prefix token some multilingual
