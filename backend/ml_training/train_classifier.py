@@ -1,23 +1,36 @@
 """
 train_classifier.py
-Trains the action-item classifier (TF-IDF + Logistic Regression) on the
-labeled dataset produced by prepare_dataset.py, and saves it to
-saved_models/action_item_clf.pkl.
+Trains the action-item classifier on the labeled dataset produced by
+prepare_dataset.py, and saves it to saved_models/action_item_clf.pkl.
+
+Uses a pretrained sentence-embedding model (all-MiniLM-L6-v2) to turn each
+sentence into a dense vector that captures meaning, not just word overlap,
+then trains Logistic Regression on top of those vectors. This replaced an
+earlier TF-IDF (bag-of-words) version, which couldn't distinguish
+semantically different but lexically similar sentences — e.g. "Any
+comments?" and "Could you look into the market research?" share enough
+surface vocabulary to confuse a bag-of-words model, even though they're
+clearly different kinds of sentences to a human reader.
+
+The embedding model itself is NOT pickled — only the trained classifier is
+saved. Both training and inference load the same named pretrained embedder
+fresh each time, via sentence-transformers' own model cache, avoiding the
+kind of version-fragility a pickled deep-learning model would introduce.
 
 pipeline/action_items.py automatically picks this up once it exists —
-no other code changes needed.
+no other code changes needed there beyond matching the embedding step.
 
 Usage:
     python -m ml_training.train_classifier
 """
 
 import os
+import csv
 import joblib
 
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sentence_transformers import SentenceTransformer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, confusion_matrix
-import csv
 
 _LABELED_DIR = os.path.join(os.path.dirname(__file__), "data", "labeled")
 _TRAIN_PATH = os.path.join(_LABELED_DIR, "train.csv")
@@ -25,6 +38,10 @@ _TEST_PATH = os.path.join(_LABELED_DIR, "test.csv")
 
 _MODEL_DIR = os.path.join(os.path.dirname(__file__), "saved_models")
 _MODEL_PATH = os.path.join(_MODEL_DIR, "action_item_clf.pkl")
+
+# Shared constant — pipeline/action_items.py must use this exact same name
+# so training and inference embed sentences identically.
+EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 
 
 def _load_csv(path: str):
@@ -47,14 +64,14 @@ def train_classifier():
     test_texts, test_labels = _load_csv(_TEST_PATH)
 
     print(f"Training on {len(train_texts)} examples, testing on {len(test_texts)}.")
+    print(f"Loading embedding model ({EMBEDDING_MODEL_NAME})... this may take a moment the first time.")
 
-    vectorizer = TfidfVectorizer(
-        max_features=10000,
-        ngram_range=(1, 2),
-        stop_words="english",
-    )
-    X_train = vectorizer.fit_transform(train_texts)
-    X_test = vectorizer.transform(test_texts)
+    embedder = SentenceTransformer(EMBEDDING_MODEL_NAME)
+
+    print("Embedding training sentences...")
+    X_train = embedder.encode(train_texts, show_progress_bar=True)
+    print("Embedding test sentences...")
+    X_test = embedder.encode(test_texts, show_progress_bar=True)
 
     clf = LogisticRegression(max_iter=1000, class_weight="balanced")
     clf.fit(X_train, train_labels)
@@ -67,7 +84,7 @@ def train_classifier():
     print(confusion_matrix(test_labels, preds))
 
     os.makedirs(_MODEL_DIR, exist_ok=True)
-    joblib.dump({"classifier": clf, "vectorizer": vectorizer}, _MODEL_PATH)
+    joblib.dump({"classifier": clf, "embedding_model_name": EMBEDDING_MODEL_NAME}, _MODEL_PATH)
     print(f"\nSaved trained model to {_MODEL_PATH}")
 
 
