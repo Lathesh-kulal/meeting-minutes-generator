@@ -60,7 +60,7 @@ _RANDOM_SEED = 42
 # How many times each augmentation example is duplicated in the training
 # set. Tuned so the augmentation carries meaningful weight against the much
 # larger base dataset without overwhelming it.
-_AUGMENTATION_OVERSAMPLE_FACTOR = 15
+_AUGMENTATION_OVERSAMPLE_FACTOR = 6
 
 
 def _load_raw_rows(path: str) -> list[tuple[str, int]]:

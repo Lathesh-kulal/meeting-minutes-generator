@@ -11,13 +11,13 @@ rest of the pipeline run end-to-end before training is done.
 import os
 import re
 import joblib
-
+from sentence_transformers import SentenceTransformer
 _MODEL_PATH = os.path.join(
     os.path.dirname(__file__), "..", "ml_training", "saved_models", "action_item_clf.pkl"
 )
 
 _clf = None
-_vectorizer = None
+_embedder = None
 
 # --- Rule-based fallback ---
 _ACTION_PATTERNS = re.compile(
@@ -29,12 +29,12 @@ _ACTION_PATTERNS = re.compile(
 
 
 def _load_trained_model():
-    global _clf, _vectorizer
+    global _clf, _embedder
     if _clf is None and os.path.exists(_MODEL_PATH):
         bundle = joblib.load(_MODEL_PATH)
         _clf = bundle["classifier"]
-        _vectorizer = bundle["vectorizer"]
-    return _clf, _vectorizer
+        _embedder = SentenceTransformer(bundle["embedding_model_name"])
+    return _clf, _embedder
 
 
 def _rule_based_is_action_item(sentence: str) -> bool:
@@ -51,11 +51,12 @@ def extract_action_items(sentences: list[str]) -> list[dict]:
     Returns:
         list of {"text": str, "method": "trained"|"rule_based"}
     """
-    clf, vectorizer = _load_trained_model()
+
+    clf, embedder = _load_trained_model()
     results = []
 
-    if clf is not None and vectorizer is not None:
-        X = vectorizer.transform(sentences)
+    if clf is not None and embedder is not None:
+        X = embedder.encode(sentences)
         preds = clf.predict(X)
         for sentence, pred in zip(sentences, preds):
             if pred == 1:
