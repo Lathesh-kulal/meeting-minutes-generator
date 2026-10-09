@@ -11,6 +11,16 @@ from datetime import datetime
 from weasyprint import HTML
 
 
+def _task_html(item):
+    """Clean task text (LLM results) with the original sentence as a small quote."""
+    text = item.get("text") or ""
+    task = item.get("task")
+    if task and task != text:
+        return (f"{_esc(task)}<div style='font-size:9pt;color:#777;margin-top:3px;'>"
+                f"\u201c{_esc(text)}\u201d</div>")
+    return _esc(text)
+
+
 def _format_date(iso_str):
     if not iso_str:
         return "N/A"
@@ -64,7 +74,7 @@ def generate_pdf(meeting_data: dict) -> bytes:
     action_items = meeting_data.get("action_items") or []
     if action_items:
         rows_html = "".join(
-            f"<tr><td>{_esc(item.get('text'))}</td>"
+            f"<tr><td>{_task_html(item)}</td>"
             f"<td>{_esc(item.get('assigned_to') or 'Unassigned')}</td>"
             f"<td>{_esc(item.get('due_date') or 'No due date')}</td></tr>"
             for item in action_items

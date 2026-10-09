@@ -101,17 +101,26 @@ def enrich_action_items(action_items: list[dict]) -> list[dict]:
         action_items: list of {"text": str, "method": str}
 
     Returns:
-        same list with added "assigned_to" (str or None) and "due_date" (str or None)
+        same list with "assigned_to" (str or None) and "due_date" (str or None) filled in
     """
     enriched = []
     for item in action_items:
-        entities = extract_entities(item["text"])
-        enriched.append({
-            **item,
-            "assigned_to": entities["people"][0] if entities["people"] else None,
-            "due_date": entities["dates"][0] if entities["dates"] else None,
-        })
+        # LLM results already carry assignee/due date (resolved with dialogue
+        # context); only fill the gaps with NER instead of overwriting them.
+        assigned_to = item.get("assigned_to")
+        due_date = item.get("due_date")
+
+        if not assigned_to or not due_date:
+            entities = extract_entities(item["text"])
+            if not assigned_to and entities["people"]:
+                assigned_to = entities["people"][0]
+            if not due_date and entities["dates"]:
+                due_date = entities["dates"][0]
+
+        enriched.append({**item, "assigned_to": assigned_to, "due_date": due_date})
     return enriched
+
+
 def find_person_names(text: str) -> list[str]:
     """
     Returns all distinct person names detected in text, in order of first

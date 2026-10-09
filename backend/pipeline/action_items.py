@@ -1,17 +1,30 @@
 """
 action_items.py
-Extracts action-item sentences from a transcript.
+Extracts action items from a transcript.
 
-Uses the trained classifier from ml_training/saved_models/action_item_clf.pkl
-if it exists. Falls back to a simple rule-based heuristic (modal verbs +
-imperative patterns) if no trained model is available yet — this lets the
-rest of the pipeline run end-to-end before training is done.
+Backend priority (ACTION_ITEM_BACKEND=auto, the default):
+  1. Local LLM via Ollama           (pipeline/llm_action_items.py)
+  2. Trained sentence-embedding classifier (ml_training/saved_models/action_item_clf.pkl)
+  3. Rule-based heuristic           (modal verbs + imperative patterns)
+
+If a higher-priority backend is unavailable (e.g. Ollama isn't running), the
+next one is used automatically so the pipeline never breaks.
+
+Force a single backend with the ACTION_ITEM_BACKEND environment variable:
+    auto | llm | classifier | rules
 """
 
+import logging
 import os
 import re
 import joblib
-from sentence_transformers import SentenceTransformer
+
+from .llm_action_items import LLMUnavailable, extract_action_items_llm
+
+logger = logging.getLogger(__name__)
+
+BACKEND = os.environ.get("ACTION_ITEM_BACKEND", "auto").lower()
+
 _MODEL_PATH = os.path.join(
     os.path.dirname(__file__), "..", "ml_training", "saved_models", "action_item_clf.pkl"
 )
@@ -31,6 +44,10 @@ _ACTION_PATTERNS = re.compile(
 def _load_trained_model():
     global _clf, _embedder
     if _clf is None and os.path.exists(_MODEL_PATH):
+        # Imported lazily so the LLM / rule-based paths don't pay the
+        # torch + sentence-transformers import cost (or fail if it's missing).
+        from sentence_transformers import SentenceTransformer
+
         bundle = joblib.load(_MODEL_PATH)
         _clf = bundle["classifier"]
         _embedder = SentenceTransformer(bundle["embedding_model_name"])
@@ -41,17 +58,7 @@ def _rule_based_is_action_item(sentence: str) -> bool:
     return bool(_ACTION_PATTERNS.search(sentence))
 
 
-def extract_action_items(sentences: list[str]) -> list[dict]:
-    """
-    Flags sentences that look like action items.
-
-    Args:
-        sentences: list of transcript sentences
-
-    Returns:
-        list of {"text": str, "method": "trained"|"rule_based"}
-    """
-
+def _extract_with_classifier_or_rules(sentences: list[str]) -> list[dict]:
     clf, embedder = _load_trained_model()
     results = []
 
@@ -62,12 +69,34 @@ def extract_action_items(sentences: list[str]) -> list[dict]:
             if pred == 1:
                 results.append({"text": sentence, "method": "trained"})
     else:
-        # Fallback so the pipeline still works before the classifier is trained
         for sentence in sentences:
             if _rule_based_is_action_item(sentence):
                 results.append({"text": sentence, "method": "rule_based"})
 
     return results
+
+
+def extract_action_items(sentences: list[str]) -> list[dict]:
+    """
+    Detects action items in a list of transcript sentences.
+
+    Args:
+        sentences: list of transcript sentences (in order)
+
+    Returns:
+        list of {"text": str, "method": "llm"|"trained"|"rule_based"}.
+        LLM results also include "task", "assigned_to" and "due_date".
+    """
+    if BACKEND in ("auto", "llm"):
+        try:
+            return extract_action_items_llm(sentences)
+        except LLMUnavailable as exc:
+            if BACKEND == "llm":
+                raise
+            logger.warning("LLM action-item extraction unavailable (%s). "
+                           "Falling back to classifier/rules.", exc)
+
+    return _extract_with_classifier_or_rules(sentences)
 
 
 if __name__ == "__main__":

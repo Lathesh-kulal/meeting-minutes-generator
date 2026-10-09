@@ -15,7 +15,12 @@ export default function ActionItemsList({ items }) {
       <tbody>
         {items.map((item, i) => (
           <tr key={i}>
-            <td>{item.text}</td>
+            <td>
+              {item.task || item.text}
+              {item.task && item.task !== item.text && (
+                <div style={{ fontSize: '0.8em', opacity: 0.6 }}>“{item.text}”</div>
+              )}
+            </td>
             <td>{item.assigned_to || '-'}</td>
             <td>{item.due_date || '-'}</td>
           </tr>

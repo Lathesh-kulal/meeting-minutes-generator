@@ -1,4 +1,4 @@
-from action_items import _load_trained_model
+from pipeline.action_items import _load_trained_model
 
 clf, embedder = _load_trained_model()
 

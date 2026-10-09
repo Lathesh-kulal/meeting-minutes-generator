@@ -1,0 +1,109 @@
+# One sentence per line. Lines starting with [A] are gold action items.
+# Blank line = new meeting. Lines starting with # are ignored.
+# Written to be spoken-style and include tricky cases (context-dependent
+# acceptances, "will" in plain statements, facilitation phrases).
+# ADD YOUR OWN REAL MEETINGS HERE to get a trustworthy score.
+
+Good morning everyone, thanks for joining.
+Let's start with the Q3 marketing budget.
+The campaign went over budget by ten percent last quarter.
+[A] Rahul, can you pull together the revised numbers by Thursday?
+[A] Sure, I'll send them to finance once they're ready.
+Any questions on that?
+The new landing page will go live in May.
+[A] Priya, please book the venue for the offsite before the end of the month.
+Okay, noted.
+That was really useful information.
+Let's move on to the product roadmap.
+Sneha mentioned that the beta feedback has been mostly positive.
+[A] We need to get legal to review the vendor contract before we sign.
+I think the roadmap looks solid overall.
+[A] Amit, you'll own the migration plan and share a draft next Monday.
+Will do.
+We should probably celebrate when this ships.
+Alright, that's everything for today.
+Thanks all, see you next week.
+
+Welcome back, let's get started.
+Last sprint we finished the login redesign.
+The API latency is down thirty percent since the fix.
+[A] Karan, could you write up the deployment checklist by Wednesday?
+Yes, I'll have it done by then.
+Does anyone have concerns about the timeline?
+I don't think we'll hit the original deadline.
+[A] Let's make sure someone follows up with the client about the delay.
+[A] I'll email them this afternoon.
+The client was happy with the demo last week.
+[A] Divya, please update the project tracker with the new dates.
+Hmm, that's a good point.
+Next, let's talk about hiring.
+We have three candidates in the pipeline.
+[A] Deepak needs to schedule the final interviews for next week.
+It would be nice to improve our onboarding at some point.
+Okay, I think we're done here.
+
+# Meeting 3: real recording (Whisper base output, left as transcribed, including
+# its errors like "our office" for "our offer" and glued words).
+# Anna's proposal to review account procedures was never agreed -> deliberately NOT gold.
+Is an energy company based in the UK?
+Marcus, the managing director, wants to discuss the company's sales figures.
+He is meeting Maya, the finance director, David, the sales and marketing director, andAnna, the customer services director.
+Now, you all know why I've called this meeting.
+What's figuresfor our region are down and we need to address this as soon as we can.
+So I'd like to start by asking Maya to talk us through the figures.
+Okay, Maya?
+Fine.
+And then we can take a look at the products we're offering and compare them with the competition.
+So Maya, over to you.
+Thanks, Marcus.
+Well, I've prepared some handouts to show you how the figures are looking.
+If we look at sales year to date.
+So in order to meet budget this year, we will, in my opinion, have to start some cost saving measures.
+What do you mean by that redundancies?
+That's one possibility.
+I can't agree with you there.
+We needa strong work force.
+Okay, thanks, Maya.
+Look, cost cutting is something that we need to think about.
+But we also need to stop the downturn in sales and regain market share.
+So can I bring you in here,David?
+Any comments?
+Well, it's hard to know what the problem is.
+Our products are competitive.
+So they're not getting better offence from the competition.
+I don't think so.
+How about I talk you through our office at the moment?
+I've prepared some handouts.
+Yes, go ahead.
+It'll be good to look at the details.
+Okay.
+Thanks, David.
+That was all useful information.
+So Anna, can we turn to you now?
+Do you have any ideas why this downturn is happening?
+Well, it's true we are seeing a decrease in custom in our region.
+There's also been an increase in customers cancelling new contracts within 14 days.
+Butdo why?
+Do the customers say why they don't like our office?
+I personally feel that this is vital information.
+If I can finish what I was saying, I'd like to suggest we review our customer account procedures from first contact to after-sales care., perhaps it would be a good idea to start with that and see if the sales figures improve.
+Thanks, Anna.
+What do you two think of that?
+Can I make another suggestion?
+I think we need to see the whole picture from the customer's point of view.
+A customer survey, perhaps.
+That would be a big project.
+It would need a project team, which means taking staff from other departments.
+Actually, I was thinking about hiring an external researcher, get a neutral viewon our position in the market and customers' views on us.
+I like that idea.
+I think it could be veryuseful information.
+Which department pays for it, though?
+We can talk about that in a minute.
+Do youagree, in principle, though, that we need to understand the cause of the problem?
+Yes, I suppose so.
+Good.
+[A] David, could you look for a market research company we could work with on those?
+Sure.
+Great.
+Well, let's move on, man.
+Shall we?

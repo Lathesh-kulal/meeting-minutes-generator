@@ -10,7 +10,7 @@ Expected input shape (see models.py / pipeline_runner.py):
     "transcript": str,
     "highlights": [str, ...],
     "chapters": [{"chapter_id", "title", "summary", "text"}, ...],
-    "action_items": [{"text", "assigned_to", "due_date", "method"}, ...],
+    "action_items": [{"text", "task" (optional), "assigned_to", "due_date", "method"}, ...],
 }
 """
 import io
@@ -80,7 +80,14 @@ def generate_docx(meeting_data: dict) -> bytes:
             cell.paragraphs[0].runs[0].bold = True
         for item in action_items:
             row = ai_table.add_row().cells
-            row[0].text = item.get("text", "")
+            text = item.get("text", "")
+            task = item.get("task")
+            row[0].text = task if task and task != text else text
+            if task and task != text:
+                quote = row[0].add_paragraph().add_run(f"\u201c{text}\u201d")
+                quote.italic = True
+                quote.font.size = Pt(8)
+                quote.font.color.rgb = RGBColor(0x77, 0x77, 0x77)
             row[1].text = item.get("assigned_to") or "Unassigned"
             row[2].text = item.get("due_date") or "No due date"
     else:

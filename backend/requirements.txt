@@ -32,3 +32,4 @@ pydyf<0.11.0
 python-dotenv==1.0.1
 joblib==1.4.2
 sentence-transformers
+requests>=2.31
