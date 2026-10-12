@@ -43,7 +43,7 @@ import requests
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
 OLLAMA_TIMEOUT = int(os.environ.get("OLLAMA_TIMEOUT", "180"))
-WINDOW_CHARS = int(os.environ.get("LLM_WINDOW_CHARS", "3500"))
+WINDOW_CHARS = int(os.environ.get("LLM_WINDOW_CHARS", "6000"))
 OVERLAP_SENTENCES = int(os.environ.get("LLM_OVERLAP_SENTENCES", "3"))
 
 _EVIDENCE_MATCH_THRESHOLD = 0.80  # fuzzy match ratio for quote verification

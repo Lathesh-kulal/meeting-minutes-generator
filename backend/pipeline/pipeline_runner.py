@@ -14,13 +14,14 @@ This is the one function the Flask app (and any offline scripts) should
 call to go from raw input to a fully structured result.
 """
 
+import time
+
 from . import transcribe
 from . import preprocess
 from . import segment
 from . import summarize
 from . import action_items
 from . import ner_utils
-
 
 def run_pipeline(audio_path: str = None, raw_text: str = None, meeting_title: str = None) -> dict:
     """
@@ -46,24 +47,40 @@ def run_pipeline(audio_path: str = None, raw_text: str = None, meeting_title: st
 
     # Step 1: Transcription (skip if text was already provided)
     if raw_text is None:
+        t0 = time.time()
         transcription = transcribe.transcribe_audio(audio_path)
         raw_text = transcription["text"]
+        print(f"[TIMING] transcribe: {time.time() - t0:.1f}s")
 
     # Step 2: Preprocessing
+    t0 = time.time()
     pre = preprocess.preprocess_transcript(raw_text)
     cleaned_text = pre["cleaned_text"]
     sentences = pre["sentences"]
+    print(f"[TIMING] preprocess: {time.time() - t0:.1f}s")
 
     # Step 3: Topic segmentation
+    t0 = time.time()
     chapters_raw = segment.segment_transcript(cleaned_text, sentences)
+    print(f"[TIMING] segment: {time.time() - t0:.1f}s")
 
     # Step 4: Summarization (per-chapter + overall highlights)
+    t0 = time.time()
     chapters = summarize.summarize_chapters(chapters_raw)
+    print(f"[TIMING] summarize_chapters: {time.time() - t0:.1f}s")
+
+    t0 = time.time()
     highlights = summarize.generate_highlights(cleaned_text)
+    print(f"[TIMING] generate_highlights: {time.time() - t0:.1f}s")
 
     # Step 5: Action item extraction + enrichment
+    t0 = time.time()
     raw_action_items = action_items.extract_action_items(sentences)
+    print(f"[TIMING] extract_action_items: {time.time() - t0:.1f}s")
+
+    t0 = time.time()
     enriched_action_items = ner_utils.enrich_action_items(raw_action_items)
+    print(f"[TIMING] enrich_action_items: {time.time() - t0:.1f}s")
 
     return {
         "meeting_title": meeting_title or "Untitled Meeting",
