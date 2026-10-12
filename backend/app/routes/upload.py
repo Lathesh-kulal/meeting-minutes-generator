@@ -53,10 +53,15 @@ def create_meeting():
 
     audio_path = None
     if audio_file and audio_file.filename:
-        filename = secure_filename(audio_file.filename)
-        unique_name = f"{uuid.uuid4().hex}_{filename}"
-        audio_path = os.path.join(current_app.config["UPLOAD_FOLDER"], unique_name)
-        audio_file.save(audio_path)
+        if audio_file.filename.lower().endswith(".txt"):
+            # A downloaded Zoom/Teams transcript, or any plain-text file —
+            # read it as the transcript text instead of treating it as audio.
+            raw_text = audio_file.read().decode("utf-8", errors="replace")
+        else:
+            filename = secure_filename(audio_file.filename)
+            unique_name = f"{uuid.uuid4().hex}_{filename}"
+            audio_path = os.path.join(current_app.config["UPLOAD_FOLDER"], unique_name)
+            audio_file.save(audio_path)
 
     meeting = Meeting(title=title or "Untitled Meeting", status="processing", user_id=current_user.id)
     db.session.add(meeting)

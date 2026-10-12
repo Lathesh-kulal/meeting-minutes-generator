@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { uploadMeeting } from '../api/client'
 
 export default function UploadPage() {
-  const [mode, setMode] = useState('file') // 'file' or 'record'
+  const [mode, setMode] = useState('file') // 'file' | 'record' | 'text'
   const [file, setFile] = useState(null)
+  const [transcriptText, setTranscriptText] = useState('')
   const [title, setTitle] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -121,6 +122,7 @@ export default function UploadPage() {
     if (isRecording) stopRecording()
     setFile(null)
     setRecordedInfo('')
+    setTranscriptText('')
     setError('')
     setMode(newMode)
   }
@@ -129,17 +131,26 @@ export default function UploadPage() {
     e.preventDefault()
     setError('')
 
-    if (!file) {
+    if (mode === 'text') {
+      if (!transcriptText.trim()) {
+        setError('Please paste a transcript before generating minutes.')
+        return
+      }
+    } else if (!file) {
       setError(
         mode === 'file'
-          ? 'Please choose an audio/video/text file to upload.'
+          ? 'Please choose an audio or video file to upload.'
           : 'Please record a meeting before generating minutes.'
       )
       return
     }
 
     const formData = new FormData()
-    formData.append('audio', file)
+    if (mode === 'text') {
+      formData.append('text', transcriptText)
+    } else {
+      formData.append('audio', file)
+    }
     if (title) formData.append('title', title)
 
     setSubmitting(true)
@@ -163,6 +174,9 @@ export default function UploadPage() {
         <button type="button" onClick={() => switchMode('record')} disabled={mode === 'record'}>
           Record a live meeting
         </button>
+        <button type="button" onClick={() => switchMode('text')} disabled={mode === 'text'}>
+          Paste a transcript
+        </button>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -173,13 +187,14 @@ export default function UploadPage() {
           onChange={(e) => setTitle(e.target.value)}
         />
 
-        {mode === 'file' ? (
+        {mode === 'file' && (
           <input
             type="file"
             accept="audio/*,video/*,.txt"
             onChange={(e) => setFile(e.target.files[0])}
           />
-        ) : (
+        )}
+        {mode === 'record' && (
           <div>
             <p>
               Share the meeting's tab (or your whole screen) with audio enabled, and keep
@@ -196,6 +211,16 @@ export default function UploadPage() {
             )}
             {recordedInfo && <p>{recordedInfo}</p>}
           </div>
+        )}
+
+        {mode === 'text' && (
+          <textarea
+            rows={10}
+            placeholder="Paste the meeting transcript here..."
+            value={transcriptText}
+            onChange={(e) => setTranscriptText(e.target.value)}
+            style={{ width: '100%' }}
+          />
         )}
 
         {error && <p style={{ color: 'red' }}>{error}</p>}
