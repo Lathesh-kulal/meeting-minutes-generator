@@ -36,16 +36,16 @@ export default function ExportButton({ meetingId }) {
   }
 
   return (
-    <div>
-      <select value={format} onChange={(e) => setFormat(e.target.value)}>
+    <div className="export-bar">
+      <select value={format} onChange={(e) => setFormat(e.target.value)} aria-label="File format">
         <option value="pdf">PDF</option>
         <option value="docx">DOCX</option>
       </select>
       <LanguageSelector value={lang} onChange={setLang} />
       <button onClick={handleExport} disabled={exporting}>
-        {exporting ? 'Preparing download...' : 'Download'}
+        {exporting ? 'Preparing download...' : '⬇ Download'}
       </button>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
+      {error && <div className="alert-error export-error">{error}</div>}
     </div>
   )
 }

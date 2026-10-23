@@ -12,7 +12,7 @@ const LANGUAGES = [
 
 export default function LanguageSelector({ value, onChange }) {
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)}>
+    <select value={value} onChange={(e) => onChange(e.target.value)} aria-label="Output language">
       {LANGUAGES.map((l) => (
         <option key={l.code} value={l.code}>{l.label}</option>
       ))}
