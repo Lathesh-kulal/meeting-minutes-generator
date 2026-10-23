@@ -2,6 +2,12 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { uploadMeeting } from '../api/client'
 
+const MODES = [
+  { id: 'file', icon: '📁', label: 'Upload a file' },
+  { id: 'record', icon: '🎙️', label: 'Record live' },
+  { id: 'text', icon: '📝', label: 'Paste transcript' },
+]
+
 export default function UploadPage() {
   const [mode, setMode] = useState('file') // 'file' | 'record' | 'text'
   const [file, setFile] = useState(null)
@@ -9,6 +15,7 @@ export default function UploadPage() {
   const [title, setTitle] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [dragging, setDragging] = useState(false)
 
   const [isRecording, setIsRecording] = useState(false)
   const [recordedInfo, setRecordedInfo] = useState('') // short label once a recording is ready
@@ -18,6 +25,7 @@ export default function UploadPage() {
   const displayStreamRef = useRef(null)
   const chunksRef = useRef([])
   const timerRef = useRef(null)
+  const secondsRef = useRef(0)
 
   const navigate = useNavigate()
 
@@ -71,9 +79,9 @@ export default function UploadPage() {
     displayStreamRef.current = displayStream
 
     // If the user stops sharing from the browser's own UI (not our Stop button),
-    // treat that the same as pressing Stop.
+    // treat that the same as pressing Stop. stopRecording() is safe to call twice.
     displayStream.getVideoTracks()[0].onended = () => {
-      if (isRecording) stopRecording()
+      stopRecording()
     }
 
     const audioOnlyStream = new MediaStream(audioTracks)
@@ -90,15 +98,19 @@ export default function UploadPage() {
         type: 'audio/webm',
       })
       setFile(recordedFile)
-      setRecordedInfo(`Recording ready (${formatTime(seconds)}) — ${recordedFile.name}`)
+      setRecordedInfo(`Recording ready (${formatTime(secondsRef.current)})`)
       stopCaptureTracks()
     }
 
     mediaRecorderRef.current = recorder
     recorder.start()
     setIsRecording(true)
+    secondsRef.current = 0
     setSeconds(0)
-    timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000)
+    timerRef.current = setInterval(() => {
+      secondsRef.current += 1
+      setSeconds(secondsRef.current)
+    }, 1000)
   }
 
   const stopRecording = () => {
@@ -119,12 +131,21 @@ export default function UploadPage() {
   }
 
   const switchMode = (newMode) => {
+    if (newMode === mode) return
     if (isRecording) stopRecording()
     setFile(null)
     setRecordedInfo('')
     setTranscriptText('')
     setError('')
     setMode(newMode)
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    setDragging(false)
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      setFile(e.dataTransfer.files[0])
+    }
   }
 
   const handleSubmit = async (e) => {
@@ -165,68 +186,103 @@ export default function UploadPage() {
 
   return (
     <div>
-      <h1>Upload a Meeting</h1>
-
-      <div>
-        <button type="button" onClick={() => switchMode('file')} disabled={mode === 'file'}>
-          Upload a file
-        </button>
-        <button type="button" onClick={() => switchMode('record')} disabled={mode === 'record'}>
-          Record a live meeting
-        </button>
-        <button type="button" onClick={() => switchMode('text')} disabled={mode === 'text'}>
-          Paste a transcript
-        </button>
+      <div className="page-header">
+        <div>
+          <h1>New Meeting</h1>
+          <p className="subtitle">Turn a recording or transcript into structured minutes.</p>
+        </div>
       </div>
 
-      <form onSubmit={handleSubmit}>
-        <input
-          type="text"
-          placeholder="Meeting title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
+      <div className="mode-tabs">
+        {MODES.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            className={`mode-tab${mode === m.id ? ' active' : ''}`}
+            onClick={() => switchMode(m.id)}
+          >
+            {m.icon} {m.label}
+          </button>
+        ))}
+      </div>
+
+      <form className="card" onSubmit={handleSubmit}>
+        <div className="form-field">
+          <label htmlFor="meeting-title">
+            Meeting title <span className="optional">(optional)</span>
+          </label>
+          <input
+            id="meeting-title"
+            type="text"
+            placeholder="e.g. Q3 sales review"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </div>
 
         {mode === 'file' && (
-          <input
-            type="file"
-            accept="audio/*,video/*,.txt"
-            onChange={(e) => setFile(e.target.files[0])}
-          />
+          <label
+            className={`dropzone${dragging ? ' dragging' : ''}`}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={handleDrop}
+          >
+            <input
+              type="file"
+              accept="audio/*,video/*,.txt"
+              style={{ display: 'none' }}
+              onChange={(e) => setFile(e.target.files[0])}
+            />
+            <span className="dropzone-icon">☁️</span>
+            <span>Drop a file here, or click to browse</span>
+            <p className="dropzone-hint">
+              Audio or video recordings, or a .txt transcript (e.g. exported from Zoom or Teams)
+            </p>
+            {file && <span className="file-chosen">✓ {file.name}</span>}
+          </label>
         )}
+
         {mode === 'record' && (
-          <div>
+          <div className="record-panel">
             <p>
               Share the meeting's tab (or your whole screen) with audio enabled, and keep
               this page open for the duration of the meeting.
             </p>
+            <div className="record-timer">
+              <span className={`rec-dot${isRecording ? ' live' : ''}`} /> {formatTime(seconds)}
+            </div>
             {!isRecording ? (
               <button type="button" onClick={startRecording}>
-                Start Recording
+                ● Start recording
               </button>
             ) : (
-              <button type="button" onClick={stopRecording}>
-                Stop Recording ({formatTime(seconds)})
+              <button type="button" className="btn-stop" onClick={stopRecording}>
+                ■ Stop recording
               </button>
             )}
-            {recordedInfo && <p>{recordedInfo}</p>}
+            {recordedInfo && <div><span className="file-chosen">✓ {recordedInfo}</span></div>}
           </div>
         )}
 
         {mode === 'text' && (
-          <textarea
-            rows={10}
-            placeholder="Paste the meeting transcript here..."
-            value={transcriptText}
-            onChange={(e) => setTranscriptText(e.target.value)}
-            style={{ width: '100%' }}
-          />
+          <div>
+            <textarea
+              rows={10}
+              placeholder="Paste the meeting transcript here..."
+              value={transcriptText}
+              onChange={(e) => setTranscriptText(e.target.value)}
+            />
+            <p className="char-count">{transcriptText.length.toLocaleString()} characters</p>
+          </div>
         )}
 
-        {error && <p style={{ color: 'red' }}>{error}</p>}
-        <button type="submit" disabled={submitting || isRecording}>
-          {submitting ? 'Uploading...' : 'Generate Minutes'}
-        </button>
+        {error && <div className="alert-error" style={{ marginTop: 16 }}>{error}</div>}
+
+        <div className="form-actions">
+          <button className="btn-block" type="submit" disabled={submitting || isRecording}>
+            {submitting ? 'Uploading...' : 'Generate minutes'}
+          </button>
+        </div>
       </form>
     </div>
   )

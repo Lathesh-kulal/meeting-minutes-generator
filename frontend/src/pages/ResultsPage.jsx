@@ -22,25 +22,53 @@ export default function ResultsPage() {
   if (error) {
     return (
       <div>
-        <h1>Meeting Minutes</h1>
-        <p style={{ color: 'red' }}>{error}</p>
+        <div className="page-header"><h1>Meeting Minutes</h1></div>
+        <div className="alert-error">{error}</div>
       </div>
     )
   }
 
   return (
     <div>
-      <h1>{meeting ? meeting.meeting_title : 'Meeting Minutes'}</h1>
-      <div>
-        <button onClick={() => setActiveTab('highlights')}>Highlights</button>
-        <button onClick={() => setActiveTab('chapters')}>Chapters</button>
+      <div className="page-header">
+        <div>
+          <h1>{meeting ? meeting.meeting_title : 'Meeting Minutes'}</h1>
+          {meeting?.created_at && (
+            <p className="subtitle">
+              {new Date(meeting.created_at).toLocaleString([], {
+                dateStyle: 'long',
+                timeStyle: 'short',
+              })}
+            </p>
+          )}
+        </div>
       </div>
+
+      <div className="results-toolbar">
+        <div className="mode-tabs compact">
+          <button
+            type="button"
+            className={`mode-tab${activeTab === 'highlights' ? ' active' : ''}`}
+            onClick={() => setActiveTab('highlights')}
+          >
+            ✨ Highlights
+          </button>
+          <button
+            type="button"
+            className={`mode-tab${activeTab === 'chapters' ? ' active' : ''}`}
+            onClick={() => setActiveTab('chapters')}
+          >
+            📚 Chapters
+          </button>
+        </div>
+        <ExportButton meetingId={meetingId} />
+      </div>
+
       {activeTab === 'highlights' ? (
         <HighlightsView meeting={meeting} />
       ) : (
         <ChaptersView meeting={meeting} />
       )}
-      <ExportButton meetingId={meetingId} />
     </div>
   )
 }

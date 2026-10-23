@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { getMeetingStatus } from '../api/client'
 
 export default function ProcessingPage() {
@@ -39,17 +39,27 @@ export default function ProcessingPage() {
 
   if (status === 'error') {
     return (
-      <div>
-        <h1>Processing Failed</h1>
-        <p>{errorMessage}</p>
+      <div className="card center-card">
+        <div className="status-icon">⚠️</div>
+        <h1>Processing failed</h1>
+        <div className="alert-error" style={{ textAlign: 'left' }}>{errorMessage}</div>
+        <div className="center-actions">
+          <Link to="/" className="btn">Try again</Link>
+          <Link to="/history" className="btn btn-secondary">View history</Link>
+        </div>
       </div>
     )
   }
 
   return (
-    <div>
+    <div className="card center-card">
+      <div className="spinner" />
       <h1>Processing your meeting...</h1>
       <p>Transcribing, summarizing, and extracting action items. This may take a few minutes.</p>
+      <p>
+        You can leave this page. The meeting will appear in your{' '}
+        <Link to="/history">History</Link> once it's ready.
+      </p>
     </div>
   )
 }

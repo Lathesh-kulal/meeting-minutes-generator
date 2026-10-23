@@ -31,41 +31,80 @@ export default function LoginPage() {
         }
     }
 
+    const toggleMode = () => {
+        setMode(mode === 'login' ? 'register' : 'login')
+        setError('')
+    }
+
     return (
-        <div>
-            <h1>{mode === 'login' ? 'Log In' : 'Create an Account'}</h1>
-            <form onSubmit={handleSubmit}>
-                <input
-                    type="text"
-                    placeholder="Username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    required
-                />
-                {mode === 'register' && (
+        <div className="auth-wrap">
+            <div className="auth-brand">
+                <span className="brand-mark">✦</span>
+                <div>
+                    <h1>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h1>
+                    <p className="subtitle">
+                        {mode === 'login'
+                            ? 'Log in to your meeting minutes.'
+                            : 'Turn meetings into clear, shareable minutes.'}
+                    </p>
+                </div>
+            </div>
+
+            <form className="card auth-card" onSubmit={handleSubmit}>
+                <div className="form-field">
+                    <label htmlFor="username">Username</label>
                     <input
-                        type="email"
-                        placeholder="Email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
+                        id="username"
+                        type="text"
+                        autoComplete="username"
+                        placeholder="Your username"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
                         required
                     />
+                </div>
+
+                {mode === 'register' && (
+                    <div className="form-field">
+                        <label htmlFor="email">Email</label>
+                        <input
+                            id="email"
+                            type="email"
+                            autoComplete="email"
+                            placeholder="you@example.com"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                        />
+                    </div>
                 )}
-                <input
-                    type="password"
-                    placeholder="Password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                />
-                {error && <p style={{ color: 'red' }}>{error}</p>}
-                <button type="submit" disabled={submitting}>
-                    {submitting ? 'Please wait...' : mode === 'login' ? 'Log In' : 'Register'}
+
+                <div className="form-field">
+                    <label htmlFor="password">Password</label>
+                    <input
+                        id="password"
+                        type="password"
+                        autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                        placeholder="Your password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                    />
+                </div>
+
+                {error && <div className="alert-error">{error}</div>}
+
+                <button className="btn-block" type="submit" disabled={submitting}>
+                    {submitting ? 'Please wait...' : mode === 'login' ? 'Log in' : 'Create account'}
                 </button>
+
+                <p className="auth-switch">
+                    {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
+                    <button type="button" className="link-button" onClick={toggleMode}>
+                        {mode === 'login' ? 'Register' : 'Log in'}
+                    </button>
+                </p>
             </form>
-            <button onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}>
-                {mode === 'login' ? "Don't have an account? Register" : 'Already have an account? Log in'}
-            </button>
         </div>
     )
 }
