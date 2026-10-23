@@ -27,7 +27,17 @@ export function exportMeeting(meetingId, format, lang) {
 export function listMeetings() {
   return client.get('/meetings')
 }
+export function deleteMeeting(meetingId) {
+  return client.delete(`/meetings/${meetingId}`)
+}
 
+export function renameMeeting(meetingId, title) {
+  return client.patch(`/meetings/${meetingId}`, { meeting_title: title })
+}
+
+export function bulkDeleteMeetings(ids) {
+  return client.post('/meetings/bulk-delete', { ids })
+}
 export function registerUser(username, email, password) {
   return client.post('/auth/register', { username, email, password })
 }
