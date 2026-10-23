@@ -6,6 +6,7 @@ import {
   renameMeeting,
   bulkDeleteMeetings,
 } from '../api/client'
+import Modal from '../components/Modal.jsx'
 
 const STATUS_LABEL = { done: 'Ready', processing: 'Processing', error: 'Failed' }
 
@@ -14,6 +15,11 @@ export default function HistoryPage() {
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState([])
+
+  // dialog: null | { type: 'rename' | 'delete', meeting } | { type: 'bulk' }
+  const [dialog, setDialog] = useState(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     listMeetings()
@@ -35,30 +41,50 @@ export default function HistoryPage() {
 
   const toggleAll = () => setSelected(allSelected ? [] : selectableIds)
 
-  const handleDelete = async (m) => {
-    if (!window.confirm(`Delete "${m.meeting_title}"? This cannot be undone.`)) return
+  const closeDialog = () => {
+    if (busy) return
+    setDialog(null)
+  }
+
+  const openRename = (m) => {
+    setRenameValue(m.meeting_title || '')
+    setDialog({ type: 'rename', meeting: m })
+  }
+
+  const submitRename = async (e) => {
+    e.preventDefault()
+    const title = renameValue.trim()
+    if (!title) return
+    const m = dialog.meeting
+    setBusy(true)
+    try {
+      const res = await renameMeeting(m.id, title)
+      setMeetings((prev) => prev.map((x) => (x.id === m.id ? res.data : x)))
+    } catch (err) {
+      setError(err.response?.data?.error || 'Could not rename the meeting.')
+    } finally {
+      setBusy(false)
+      setDialog(null)
+    }
+  }
+
+  const confirmDelete = async () => {
+    const m = dialog.meeting
+    setBusy(true)
     try {
       await deleteMeeting(m.id)
       setMeetings((prev) => prev.filter((x) => x.id !== m.id))
       setSelected((prev) => prev.filter((x) => x !== m.id))
     } catch (err) {
       setError(err.response?.data?.error || 'Could not delete the meeting.')
+    } finally {
+      setBusy(false)
+      setDialog(null)
     }
   }
 
-  const handleRename = async (m) => {
-    const title = window.prompt('New title:', m.meeting_title || '')
-    if (title === null || !title.trim()) return
-    try {
-      const res = await renameMeeting(m.id, title.trim())
-      setMeetings((prev) => prev.map((x) => (x.id === m.id ? res.data : x)))
-    } catch (err) {
-      setError(err.response?.data?.error || 'Could not rename the meeting.')
-    }
-  }
-
-  const handleBulkDelete = async () => {
-    if (!window.confirm(`Delete ${selected.length} selected meeting(s)? This cannot be undone.`)) return
+  const confirmBulkDelete = async () => {
+    setBusy(true)
     try {
       const res = await bulkDeleteMeetings(selected)
       const gone = res.data.deleted
@@ -69,6 +95,9 @@ export default function HistoryPage() {
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Could not delete the selected meetings.')
+    } finally {
+      setBusy(false)
+      setDialog(null)
     }
   }
 
@@ -100,7 +129,7 @@ export default function HistoryPage() {
             onChange={(e) => setQuery(e.target.value)}
           />
           {selected.length > 0 && (
-            <button className="btn-danger" onClick={handleBulkDelete}>
+            <button className="btn-danger" onClick={() => setDialog({ type: 'bulk' })}>
               Delete selected ({selected.length})
             </button>
           )}
@@ -149,12 +178,12 @@ export default function HistoryPage() {
               </div>
             </div>
             <div className="history-actions">
-              <button className="btn-secondary btn-sm" onClick={() => handleRename(m)}>
+              <button className="btn-secondary btn-sm" onClick={() => openRename(m)}>
                 Rename
               </button>
               <button
                 className="btn-danger btn-sm"
-                onClick={() => handleDelete(m)}
+                onClick={() => setDialog({ type: 'delete', meeting: m })}
                 disabled={m.status === 'processing'}
               >
                 Delete
@@ -163,6 +192,65 @@ export default function HistoryPage() {
           </li>
         ))}
       </ul>
+
+      {dialog?.type === 'rename' && (
+        <Modal title="Rename meeting" onClose={closeDialog}>
+          <form onSubmit={submitRename}>
+            <label htmlFor="rename-input">Meeting title</label>
+            <input
+              id="rename-input"
+              type="text"
+              autoFocus
+              maxLength={200}
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onFocus={(e) => e.target.select()}
+            />
+            <div className="modal-actions">
+              <button type="button" className="btn-secondary" onClick={closeDialog}>
+                Cancel
+              </button>
+              <button type="submit" disabled={busy || !renameValue.trim()}>
+                {busy ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {dialog?.type === 'delete' && (
+        <Modal title="Delete meeting?" onClose={closeDialog}>
+          <p>
+            <strong>{dialog.meeting.meeting_title}</strong> and its minutes will be
+            permanently deleted. This cannot be undone.
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="btn-secondary" onClick={closeDialog}>
+              Cancel
+            </button>
+            <button type="button" className="btn-stop" onClick={confirmDelete} disabled={busy}>
+              {busy ? 'Deleting...' : 'Delete'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {dialog?.type === 'bulk' && (
+        <Modal title={`Delete ${selected.length} meeting${selected.length === 1 ? '' : 's'}?`} onClose={closeDialog}>
+          <p>
+            The selected meetings and their minutes will be permanently deleted.
+            This cannot be undone.
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="btn-secondary" onClick={closeDialog}>
+              Cancel
+            </button>
+            <button type="button" className="btn-stop" onClick={confirmBulkDelete} disabled={busy}>
+              {busy ? 'Deleting...' : 'Delete all'}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
