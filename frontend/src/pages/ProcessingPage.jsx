@@ -54,10 +54,10 @@ export default function ProcessingPage() {
     <div className="page wait" role="status">
       <div className="bar" />
       <h1>Processing your meeting</h1>
-      <p>Transcribing, summarizing, and finding action items. Long meetings can take a few minutes, so you can leave this page open.</p>
+      <p>Transcribing, summarizing, and finding action items. Long meetings can take a few minutes.</p>
       <p>
-        You can also leave this page. The meeting will appear in your{' '}
-        <Link to="/history">history</Link> when it is ready.
+        You don't need to wait here. The meeting will appear in your{' '}
+        <Link to="/history">History</Link> when it is ready.
       </p>
     </div>
   )
