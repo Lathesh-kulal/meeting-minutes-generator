@@ -7,6 +7,8 @@ import UploadPage from './pages/UploadPage.jsx'
 import ProcessingPage from './pages/ProcessingPage.jsx'
 import ResultsPage from './pages/ResultsPage.jsx'
 import HistoryPage from './pages/HistoryPage.jsx'
+import HomePage from './pages/HomePage.jsx'
+import Logo from './components/Logo.jsx'
 
 function NavBar() {
   const { user, logout } = useAuth()
@@ -15,27 +17,21 @@ function NavBar() {
   if (!user) return null
 
   const handleLogout = async () => {
+    // Go to the public home page first: if the user is cleared while a protected
+    // page is open, ProtectedRoute would otherwise redirect to /login.
+    navigate('/')
     await logout()
-    navigate('/login')
   }
 
-  const linkClass = ({ isActive }) => `nav-link${isActive ? ' active' : ''}`
-
   return (
-    <nav className="navbar">
-      <Link to="/" className="brand">
-        <span className="brand-mark">✦</span>
-        Meeting Minutes
-      </Link>
-      <div className="nav-links">
-        <NavLink to="/" end className={linkClass}>New Meeting</NavLink>
-        <NavLink to="/history" className={linkClass}>History</NavLink>
-      </div>
-      <div className="nav-user">
-        <span className="avatar">{user.username?.[0]}</span>
-        <span className="nav-username">{user.username}</span>
-        <button className="btn-secondary btn-sm" onClick={handleLogout}>Log out</button>
-      </div>
+    <nav className="nav" aria-label="Main">
+      <Link to="/" className="brand"><Logo size={26} />Meeting <span className="hl">Minutes</span></Link>
+      <NavLink to="/new" className="navlink">New meeting</NavLink>
+      <NavLink to="/history" className="navlink">History</NavLink>
+      <span className="avatar" title={user.username} aria-label={`Signed in as ${user.username}`}>
+        {user.username.charAt(0).toUpperCase()}
+      </span>
+      <button className="btn btn-sm" onClick={handleLogout}>Log out</button>
     </nav>
   )
 }
@@ -45,14 +41,15 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <NavBar />
-        <main className="page">
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
-            <Route path="/processing/:meetingId" element={<ProtectedRoute><ProcessingPage /></ProtectedRoute>} />
-            <Route path="/results/:meetingId" element={<ProtectedRoute><ResultsPage /></ProtectedRoute>} />
-            <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
-          </Routes>
+        <main>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<HomePage />} />
+          <Route path="/new" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
+          <Route path="/processing/:meetingId" element={<ProtectedRoute><ProcessingPage /></ProtectedRoute>} />
+          <Route path="/results/:meetingId" element={<ProtectedRoute><ResultsPage /></ProtectedRoute>} />
+          <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
+        </Routes>
         </main>
       </AuthProvider>
     </BrowserRouter>

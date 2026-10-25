@@ -13,6 +13,7 @@ const STATUS_LABEL = { done: 'Ready', processing: 'Processing', error: 'Failed' 
 export default function HistoryPage() {
   const [meetings, setMeetings] = useState([])
   const [error, setError] = useState('')
+  const [loaded, setLoaded] = useState(false)
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState([])
 
@@ -25,6 +26,7 @@ export default function HistoryPage() {
     listMeetings()
       .then((res) => setMeetings(res.data))
       .catch(() => setError('Could not load your meeting history.'))
+      .finally(() => setLoaded(true))
   }, [])
 
   const visible = meetings.filter((m) =>
@@ -35,10 +37,7 @@ export default function HistoryPage() {
     selectableIds.length > 0 && selectableIds.every((id) => selected.includes(id))
 
   const toggleSelected = (id) =>
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    )
-
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   const toggleAll = () => setSelected(allSelected ? [] : selectableIds)
 
   const closeDialog = () => {
@@ -102,87 +101,77 @@ export default function HistoryPage() {
   }
 
   return (
-    <div>
-      <div className="page-header">
+    <div className="page narrow">
+      <header className="page-head split">
         <div>
-          <h1>Meeting History</h1>
-          <p className="subtitle">
-            {meetings.length} {meetings.length === 1 ? 'meeting' : 'meetings'} saved
-          </p>
+          <h1>Meeting history</h1>
+          {loaded && (
+            <p>{meetings.length} {meetings.length === 1 ? 'meeting' : 'meetings'} saved</p>
+          )}
         </div>
-        <Link to="/" className="btn">+ New meeting</Link>
-      </div>
+        <Link className="btn btn-primary" to="/new">New meeting</Link>
+      </header>
 
-      {error && <div className="alert-error">{error}</div>}
+      {error && <p className="alert" role="alert" style={{ marginBottom: '1rem' }}>{error}</p>}
+
+      {loaded && meetings.length === 0 && !error && (
+        <div className="panel empty">
+          <p>No meetings yet. Upload a recording to create your first minutes.</p>
+          <Link className="btn btn-primary" to="/new">Upload a meeting</Link>
+        </div>
+      )}
 
       {meetings.length > 0 && (
-        <div className="history-toolbar">
-          <label className="select-all">
+        <div className="hbar">
+          <label className="check">
             <input type="checkbox" checked={allSelected} onChange={toggleAll} />
             All
           </label>
           <input
-            className="search"
+            className="field"
             type="search"
-            placeholder="Search by title..."
+            placeholder="Search by title"
+            aria-label="Search meetings by title"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
           {selected.length > 0 && (
-            <button className="btn-danger" onClick={() => setDialog({ type: 'bulk' })}>
+            <button className="btn btn-danger btn-sm" onClick={() => setDialog({ type: 'bulk' })}>
               Delete selected ({selected.length})
             </button>
           )}
         </div>
       )}
 
-      {meetings.length === 0 && !error && (
-        <div className="empty">
-          <div className="empty-icon">🗂️</div>
-          <p>No meetings yet. Upload a recording or paste a transcript to get started.</p>
-          <Link to="/" className="btn">Create your first minutes</Link>
-        </div>
-      )}
       {meetings.length > 0 && visible.length === 0 && (
-        <div className="empty"><p>No meetings match your search.</p></div>
+        <p className="muted">No meetings match your search.</p>
       )}
 
-      <ul className="history-list">
+      <ul className="history">
         {visible.map((m) => (
-          <li
-            key={m.id}
-            className={`history-item${selected.includes(m.id) ? ' selected' : ''}`}
-          >
+          <li className={`hrow${selected.includes(m.id) ? ' sel' : ''}`} key={m.id}>
             <input
               type="checkbox"
+              aria-label={`Select ${m.meeting_title}`}
               checked={selected.includes(m.id)}
               onChange={() => toggleSelected(m.id)}
               disabled={m.status === 'processing'}
             />
-            <div className="history-main">
+            <div className="hmain">
               {m.status === 'done' ? (
-                <Link to={`/results/${m.id}`} className="history-title">{m.meeting_title}</Link>
+                <Link to={`/results/${m.id}`}>{m.meeting_title}</Link>
               ) : (
-                <span className="history-title">{m.meeting_title}</span>
+                <span className="title">{m.meeting_title}</span>
               )}
-              <div className="history-meta">
-                <span className={`badge badge-${m.status}`}>
-                  {STATUS_LABEL[m.status] || m.status}
-                </span>
-                <span>
-                  {new Date(m.created_at).toLocaleString([], {
-                    dateStyle: 'medium',
-                    timeStyle: 'short',
-                  })}
-                </span>
-              </div>
+              <span className={`badge ${m.status}`}>{STATUS_LABEL[m.status] || m.status}</span>
+              <span className="date">
+                {new Date(m.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+              </span>
             </div>
-            <div className="history-actions">
-              <button className="btn-secondary btn-sm" onClick={() => openRename(m)}>
-                Rename
-              </button>
+            <div className="hact">
+              <button className="btn btn-sm" onClick={() => openRename(m)}>Rename</button>
               <button
-                className="btn-danger btn-sm"
+                className="btn btn-danger btn-sm"
                 onClick={() => setDialog({ type: 'delete', meeting: m })}
                 disabled={m.status === 'processing'}
               >
@@ -195,23 +184,22 @@ export default function HistoryPage() {
 
       {dialog?.type === 'rename' && (
         <Modal title="Rename meeting" onClose={closeDialog}>
-          <form onSubmit={submitRename}>
-            <label htmlFor="rename-input">Meeting title</label>
-            <input
-              id="rename-input"
-              type="text"
-              autoFocus
-              maxLength={200}
-              value={renameValue}
-              onChange={(e) => setRenameValue(e.target.value)}
-              onFocus={(e) => e.target.select()}
-            />
+          <form onSubmit={submitRename} style={{ display: 'grid', gap: '1rem' }}>
+            <label className="lbl">Meeting title
+              <input
+                className="field"
+                type="text"
+                autoFocus
+                maxLength={200}
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onFocus={(e) => e.target.select()}
+              />
+            </label>
             <div className="modal-actions">
-              <button type="button" className="btn-secondary" onClick={closeDialog}>
-                Cancel
-              </button>
-              <button type="submit" disabled={busy || !renameValue.trim()}>
-                {busy ? 'Saving...' : 'Save'}
+              <button type="button" className="btn" onClick={closeDialog}>Cancel</button>
+              <button type="submit" className="btn btn-primary" disabled={busy || !renameValue.trim()}>
+                {busy ? 'Saving…' : 'Save'}
               </button>
             </div>
           </form>
@@ -225,28 +213,27 @@ export default function HistoryPage() {
             permanently deleted. This cannot be undone.
           </p>
           <div className="modal-actions">
-            <button type="button" className="btn-secondary" onClick={closeDialog}>
-              Cancel
-            </button>
-            <button type="button" className="btn-stop" onClick={confirmDelete} disabled={busy}>
-              {busy ? 'Deleting...' : 'Delete'}
+            <button type="button" className="btn" onClick={closeDialog}>Cancel</button>
+            <button type="button" className="btn btn-danger-solid" onClick={confirmDelete} disabled={busy}>
+              {busy ? 'Deleting…' : 'Delete'}
             </button>
           </div>
         </Modal>
       )}
 
       {dialog?.type === 'bulk' && (
-        <Modal title={`Delete ${selected.length} meeting${selected.length === 1 ? '' : 's'}?`} onClose={closeDialog}>
+        <Modal
+          title={`Delete ${selected.length} meeting${selected.length === 1 ? '' : 's'}?`}
+          onClose={closeDialog}
+        >
           <p>
             The selected meetings and their minutes will be permanently deleted.
             This cannot be undone.
           </p>
           <div className="modal-actions">
-            <button type="button" className="btn-secondary" onClick={closeDialog}>
-              Cancel
-            </button>
-            <button type="button" className="btn-stop" onClick={confirmBulkDelete} disabled={busy}>
-              {busy ? 'Deleting...' : 'Delete all'}
+            <button type="button" className="btn" onClick={closeDialog}>Cancel</button>
+            <button type="button" className="btn btn-danger-solid" onClick={confirmBulkDelete} disabled={busy}>
+              {busy ? 'Deleting…' : 'Delete all'}
             </button>
           </div>
         </Modal>

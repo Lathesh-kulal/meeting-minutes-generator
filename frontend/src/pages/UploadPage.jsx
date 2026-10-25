@@ -2,12 +2,6 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { uploadMeeting } from '../api/client'
 
-const MODES = [
-  { id: 'file', icon: '📁', label: 'Upload a file' },
-  { id: 'record', icon: '🎙️', label: 'Record live' },
-  { id: 'text', icon: '📝', label: 'Paste transcript' },
-]
-
 export default function UploadPage() {
   const [mode, setMode] = useState('file') // 'file' | 'record' | 'text'
   const [file, setFile] = useState(null)
@@ -15,7 +9,7 @@ export default function UploadPage() {
   const [title, setTitle] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const [dragging, setDragging] = useState(false)
+  const [over, setOver] = useState(false) // drag-and-drop hover state
 
   const [isRecording, setIsRecording] = useState(false)
   const [recordedInfo, setRecordedInfo] = useState('') // short label once a recording is ready
@@ -140,14 +134,6 @@ export default function UploadPage() {
     setMode(newMode)
   }
 
-  const handleDrop = (e) => {
-    e.preventDefault()
-    setDragging(false)
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setFile(e.dataTransfer.files[0])
-    }
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
@@ -160,7 +146,7 @@ export default function UploadPage() {
     } else if (!file) {
       setError(
         mode === 'file'
-          ? 'Please choose an audio or video file to upload.'
+          ? 'Please choose an audio/video/text file to upload.'
           : 'Please record a meeting before generating minutes.'
       )
       return
@@ -185,104 +171,95 @@ export default function UploadPage() {
   }
 
   return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h1>New Meeting</h1>
-          <p className="subtitle">Turn a recording or transcript into structured minutes.</p>
-        </div>
-      </div>
+    <div className="page narrow">
+      <header className="page-head">
+        <h1>New meeting</h1>
+        <p>Upload a recording, capture a meeting live, or paste a transcript.</p>
+      </header>
 
-      <div className="mode-tabs">
-        {MODES.map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            className={`mode-tab${mode === m.id ? ' active' : ''}`}
-            onClick={() => switchMode(m.id)}
-          >
-            {m.icon} {m.label}
+      <form className="panel" onSubmit={handleSubmit}>
+        <div className="seg" role="group" aria-label="Source">
+          <button type="button" aria-pressed={mode === 'file'} onClick={() => switchMode('file')}>
+            Upload a file
           </button>
-        ))}
-      </div>
+          <button type="button" aria-pressed={mode === 'record'} onClick={() => switchMode('record')}>
+            Record live
+          </button>
+          <button type="button" aria-pressed={mode === 'text'} onClick={() => switchMode('text')}>
+            Paste transcript
+          </button>
+        </div>
 
-      <form className="card" onSubmit={handleSubmit}>
-        <div className="form-field">
-          <label htmlFor="meeting-title">
-            Meeting title <span className="optional">(optional)</span>
-          </label>
+        <label className="lbl">Meeting title (optional)
           <input
-            id="meeting-title"
+            className="field"
             type="text"
-            placeholder="e.g. Q3 sales review"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
-        </div>
+        </label>
 
         {mode === 'file' && (
           <label
-            className={`dropzone${dragging ? ' dragging' : ''}`}
-            onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={handleDrop}
+            className={`drop ${over ? 'over' : ''}`}
+            onDragOver={(e) => { e.preventDefault(); setOver(true) }}
+            onDragLeave={() => setOver(false)}
+            onDrop={(e) => {
+              e.preventDefault()
+              setOver(false)
+              const dropped = e.dataTransfer.files[0]
+              if (dropped) setFile(dropped)
+            }}
           >
             <input
               type="file"
               accept="audio/*,video/*,.txt"
-              style={{ display: 'none' }}
               onChange={(e) => setFile(e.target.files[0])}
             />
-            <span className="dropzone-icon">☁️</span>
-            <span>Drop a file here, or click to browse</span>
-            <p className="dropzone-hint">
-              Audio or video recordings, or a .txt transcript (e.g. exported from Zoom or Teams)
-            </p>
-            {file && <span className="file-chosen">✓ {file.name}</span>}
+            <strong>{file ? file.name : 'Drop a file here, or click to browse'}</strong>
+            <span>{file ? 'Click to choose a different file' : 'Audio, video, or a .txt transcript'}</span>
           </label>
         )}
 
         {mode === 'record' && (
-          <div className="record-panel">
-            <p>
-              Share the meeting's tab (or your whole screen) with audio enabled, and keep
-              this page open for the duration of the meeting.
+          <div className={`rec ${isRecording ? 'live' : ''}`}>
+            <p className="note">
+              Share the meeting's tab (or your whole screen) with audio on, and keep this
+              page open until the meeting ends.
             </p>
-            <div className="record-timer">
-              <span className={`rec-dot${isRecording ? ' live' : ''}`} /> {formatTime(seconds)}
-            </div>
+            <div className="timer">{formatTime(seconds)}</div>
             {!isRecording ? (
-              <button type="button" onClick={startRecording}>
-                ● Start recording
+              <button type="button" className="btn btn-primary" onClick={startRecording}>
+                <span className="dot" /> Start recording
               </button>
             ) : (
-              <button type="button" className="btn-stop" onClick={stopRecording}>
-                ■ Stop recording
+              <button type="button" className="btn" onClick={stopRecording}>
+                <span className="dot" /> Stop recording
               </button>
             )}
-            {recordedInfo && <div><span className="file-chosen">✓ {recordedInfo}</span></div>}
+            {recordedInfo && <p className="ok-note">{recordedInfo}</p>}
           </div>
         )}
 
         {mode === 'text' && (
-          <div>
-            <textarea
-              rows={10}
-              placeholder="Paste the meeting transcript here..."
-              value={transcriptText}
-              onChange={(e) => setTranscriptText(e.target.value)}
-            />
-            <p className="char-count">{transcriptText.length.toLocaleString()} characters</p>
-          </div>
+          <>
+            <label className="lbl">Meeting transcript
+              <textarea
+                className="field"
+                rows={10}
+                placeholder="Paste the meeting transcript here…"
+                value={transcriptText}
+                onChange={(e) => setTranscriptText(e.target.value)}
+              />
+            </label>
+            <p className="chars">{transcriptText.length.toLocaleString()} characters</p>
+          </>
         )}
 
-        {error && <div className="alert-error" style={{ marginTop: 16 }}>{error}</div>}
-
-        <div className="form-actions">
-          <button className="btn-block" type="submit" disabled={submitting || isRecording}>
-            {submitting ? 'Uploading...' : 'Generate minutes'}
-          </button>
-        </div>
+        {error && <p className="alert" role="alert">{error}</p>}
+        <button type="submit" className="btn btn-primary btn-wide" disabled={submitting || isRecording}>
+          {submitting ? 'Uploading…' : 'Generate minutes'}
+        </button>
       </form>
     </div>
   )

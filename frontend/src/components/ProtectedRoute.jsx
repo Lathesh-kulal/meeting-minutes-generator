@@ -6,7 +6,7 @@ export default function ProtectedRoute({ children }) {
     const { user, loading } = useAuth()
 
     if (loading) {
-        return <p>Loading...</p>
+        return <p className="page muted">Loading…</p>
     }
 
     if (!user) {

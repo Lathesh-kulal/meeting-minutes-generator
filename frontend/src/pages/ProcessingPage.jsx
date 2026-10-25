@@ -39,26 +39,25 @@ export default function ProcessingPage() {
 
   if (status === 'error') {
     return (
-      <div className="card center-card">
-        <div className="status-icon">⚠️</div>
+      <div className="page narrow">
         <h1>Processing failed</h1>
-        <div className="alert-error" style={{ textAlign: 'left' }}>{errorMessage}</div>
-        <div className="center-actions">
-          <Link to="/" className="btn">Try again</Link>
-          <Link to="/history" className="btn btn-secondary">View history</Link>
+        <p className="alert" role="alert" style={{ marginTop: '1rem' }}>{errorMessage}</p>
+        <div className="row-actions">
+          <Link className="btn btn-primary" to="/new">Try again</Link>
+          <Link className="btn" to="/history">View history</Link>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="card center-card">
-      <div className="spinner" />
-      <h1>Processing your meeting...</h1>
-      <p>Transcribing, summarizing, and extracting action items. This may take a few minutes.</p>
+    <div className="page wait" role="status">
+      <div className="bar" />
+      <h1>Processing your meeting</h1>
+      <p>Transcribing, summarizing, and finding action items. Long meetings can take a few minutes, so you can leave this page open.</p>
       <p>
-        You can leave this page. The meeting will appear in your{' '}
-        <Link to="/history">History</Link> once it's ready.
+        You can also leave this page. The meeting will appear in your{' '}
+        <Link to="/history">history</Link> when it is ready.
       </p>
     </div>
   )

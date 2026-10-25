@@ -21,54 +21,34 @@ export default function ResultsPage() {
 
   if (error) {
     return (
-      <div>
-        <div className="page-header"><h1>Meeting Minutes</h1></div>
-        <div className="alert-error">{error}</div>
+      <div className="page narrow">
+        <h1>Meeting minutes</h1>
+        <p className="alert" role="alert" style={{ marginTop: '1rem' }}>{error}</p>
       </div>
     )
   }
 
   return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h1>{meeting ? meeting.meeting_title : 'Meeting Minutes'}</h1>
-          {meeting?.created_at && (
-            <p className="subtitle">
-              {new Date(meeting.created_at).toLocaleString([], {
-                dateStyle: 'long',
-                timeStyle: 'short',
-              })}
-            </p>
+    <div className="page">
+      <header className="page-head">
+        <h1>{meeting ? meeting.meeting_title : 'Meeting minutes'}</h1>
+      </header>
+      <div className="results">
+        <section>
+          <div className="tabs" role="tablist">
+            <button role="tab" aria-selected={activeTab === 'highlights'} onClick={() => setActiveTab('highlights')}>Highlights</button>
+            <button role="tab" aria-selected={activeTab === 'chapters'} onClick={() => setActiveTab('chapters')}>Chapters</button>
+          </div>
+          {activeTab === 'highlights' ? (
+            <HighlightsView meeting={meeting} />
+          ) : (
+            <ChaptersView meeting={meeting} />
           )}
-        </div>
+        </section>
+        <aside className="side">
+          <ExportButton meetingId={meetingId} />
+        </aside>
       </div>
-
-      <div className="results-toolbar">
-        <div className="mode-tabs compact">
-          <button
-            type="button"
-            className={`mode-tab${activeTab === 'highlights' ? ' active' : ''}`}
-            onClick={() => setActiveTab('highlights')}
-          >
-            ✨ Highlights
-          </button>
-          <button
-            type="button"
-            className={`mode-tab${activeTab === 'chapters' ? ' active' : ''}`}
-            onClick={() => setActiveTab('chapters')}
-          >
-            📚 Chapters
-          </button>
-        </div>
-        <ExportButton meetingId={meetingId} />
-      </div>
-
-      {activeTab === 'highlights' ? (
-        <HighlightsView meeting={meeting} />
-      ) : (
-        <ChaptersView meeting={meeting} />
-      )}
     </div>
   )
 }

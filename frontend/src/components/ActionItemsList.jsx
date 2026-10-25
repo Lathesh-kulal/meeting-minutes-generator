@@ -2,49 +2,30 @@ import React from 'react'
 
 export default function ActionItemsList({ items }) {
   if (!items || items.length === 0) {
-    return <div className="empty compact">No action items detected.</div>
+    return <p className="muted" style={{ marginTop: '1rem' }}>No action items found in this meeting.</p>
   }
 
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Task</th>
-            <th>Assigned to</th>
-            <th>Due date</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item, i) => (
-            <tr key={i}>
-              <td>
-                {item.task || item.text}
-                {item.task && item.task !== item.text && (
-                  <div className="task-quote">“{item.text}”</div>
-                )}
-              </td>
-              <td>
-                {item.assigned_to ? (
-                  <span className="chip chip-person">
-                    <span className="chip-avatar">{item.assigned_to[0]}</span>
-                    {item.assigned_to}
-                  </span>
-                ) : (
-                  <span className="chip chip-none">Unassigned</span>
-                )}
-              </td>
-              <td>
-                {item.due_date ? (
-                  <span className="chip chip-date">📅 {item.due_date}</span>
-                ) : (
-                  <span className="chip chip-none">No due date</span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <ul className="actions">
+      {items.map((item, i) => {
+        const owner = item.assigned_to
+        const showQuote = item.task && item.task !== item.text
+        return (
+          <li className="action" key={i}>
+            <span className={`avatar ${owner ? '' : 'none'}`} aria-hidden="true">
+              {owner ? owner.charAt(0).toUpperCase() : '?'}
+            </span>
+            <div>
+              <p className="task"><span className="hl">{item.task || item.text}</span></p>
+              <div className="meta">
+                <span className="chip owner">{owner || 'No owner'}</span>
+                <span className="chip">{item.due_date || 'No due date'}</span>
+              </div>
+              {showQuote && <p className="quote">“{item.text}”</p>}
+            </div>
+          </li>
+        )
+      })}
+    </ul>
   )
 }
