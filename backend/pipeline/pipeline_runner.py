@@ -24,6 +24,7 @@ from . import action_items
 from . import ner_utils
 
 def run_pipeline(audio_path: str = None, raw_text: str = None, meeting_title: str = None) -> dict:
+    duration_seconds = None
     """
     Runs the full pipeline end-to-end.
 
@@ -43,6 +44,7 @@ def run_pipeline(audio_path: str = None, raw_text: str = None, meeting_title: st
         }
     """
     if raw_text is None and audio_path is None:
+        
         raise ValueError("Must provide either audio_path or raw_text")
 
     # Step 1: Transcription (skip if text was already provided)
@@ -50,6 +52,7 @@ def run_pipeline(audio_path: str = None, raw_text: str = None, meeting_title: st
         t0 = time.time()
         transcription = transcribe.transcribe_audio(audio_path)
         raw_text = transcription["text"]
+        duration_seconds = int(round(transcription.get("duration") or 0)) or None
         print(f"[TIMING] transcribe: {time.time() - t0:.1f}s")
 
     # Step 2: Preprocessing
@@ -88,6 +91,7 @@ def run_pipeline(audio_path: str = None, raw_text: str = None, meeting_title: st
         "chapters": chapters,
         "highlights": highlights,
         "action_items": enriched_action_items,
+        "duration_seconds": duration_seconds,
     }
 
 

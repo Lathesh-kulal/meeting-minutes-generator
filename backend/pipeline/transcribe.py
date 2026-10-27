@@ -30,9 +30,16 @@ def transcribe_audio(audio_path: str) -> dict:
         dict with:
             "text": full transcript as a single string
             "segments": list of {"start": float, "end": float, "text": str}
+            "duration": length of the audio in seconds (float)
     """
     model = _get_model()
-    result = model.transcribe(audio_path, verbose=False)
+
+    # Decode the audio once ourselves so we know its exact length,
+    # then hand the decoded samples to Whisper.
+    audio = whisper.load_audio(audio_path)
+    duration = len(audio) / whisper.audio.SAMPLE_RATE
+
+    result = model.transcribe(audio, verbose=False)
 
     segments = [
         {
@@ -46,6 +53,7 @@ def transcribe_audio(audio_path: str) -> dict:
     return {
         "text": result["text"].strip(),
         "segments": segments,
+        "duration": duration,
     }
 
 

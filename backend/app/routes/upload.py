@@ -51,19 +51,28 @@ def create_meeting():
     if not raw_text and not audio_file:
         return jsonify({"error": "Provide either an 'audio' file or 'text' field."}), 400
 
+    source = "pasted_text"
     audio_path = None
     if audio_file and audio_file.filename:
         if audio_file.filename.lower().endswith(".txt"):
             # A downloaded Zoom/Teams transcript, or any plain-text file —
             # read it as the transcript text instead of treating it as audio.
             raw_text = audio_file.read().decode("utf-8", errors="replace")
+            source = "text_file"
         else:
             filename = secure_filename(audio_file.filename)
             unique_name = f"{uuid.uuid4().hex}_{filename}"
             audio_path = os.path.join(current_app.config["UPLOAD_FOLDER"], unique_name)
             audio_file.save(audio_path)
+            # The Upload page tells us when the audio came from live recording.
+            source = "recording" if request.form.get("source") == "recording" else "audio_file"
 
-    meeting = Meeting(title=title or "Untitled Meeting", status="processing", user_id=current_user.id)
+    meeting = Meeting(
+        title=title or "Untitled Meeting",
+        status="processing",
+        user_id=current_user.id,
+        source=source,
+    )
     db.session.add(meeting)
     db.session.commit()
 

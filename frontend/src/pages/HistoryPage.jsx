@@ -9,6 +9,21 @@ import {
 import Modal from '../components/Modal.jsx'
 
 const STATUS_LABEL = { done: 'Ready', processing: 'Processing', error: 'Failed' }
+const SOURCE_LABEL = {
+  recording: 'Recorded',
+  audio_file: 'Audio file',
+  pasted_text: 'Pasted text',
+  text_file: 'Text file',
+}
+
+function formatDuration(totalSeconds) {
+  const h = Math.floor(totalSeconds / 3600)
+  const m = Math.floor((totalSeconds % 3600) / 60)
+  const s = totalSeconds % 60
+  if (h > 0) return `${h} h ${String(m).padStart(2, '0')} min`
+  if (m > 0) return `${m} min ${String(s).padStart(2, '0')} s`
+  return `${s} s`
+}
 
 export default function HistoryPage() {
   const [meetings, setMeetings] = useState([])
@@ -164,8 +179,10 @@ export default function HistoryPage() {
                 <span className="title">{m.meeting_title}</span>
               )}
               <span className={`badge ${m.status}`}>{STATUS_LABEL[m.status] || m.status}</span>
+              {SOURCE_LABEL[m.source] && <span className="chip">{SOURCE_LABEL[m.source]}</span>}
               <span className="date">
                 {new Date(m.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+                {m.duration_seconds ? ` · ${formatDuration(m.duration_seconds)}` : ''}
               </span>
             </div>
             <div className="hact">

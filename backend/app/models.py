@@ -9,6 +9,13 @@ from .extensions import db
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 
+def _iso_utc(dt):
+    """ISO string that always carries a UTC marker, so browsers convert it to local time."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:  # SQLite returns naive datetimes; they were saved as UTC
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
@@ -37,6 +44,8 @@ class Meeting(db.Model):
     highlights_json = db.Column(db.Text, nullable=True)      # JSON-encoded list[str]
     chapters_json = db.Column(db.Text, nullable=True)        # JSON-encoded list[dict]
     action_items_json = db.Column(db.Text, nullable=True)    # JSON-encoded list[dict]
+    source = db.Column(db.String(20), nullable=True)          # recording | audio_file | pasted_text | text_file
+    duration_seconds = db.Column(db.Integer, nullable=True)   # audio length; None for text input
     
 
     def set_result(self, result: dict) -> None:
@@ -46,6 +55,7 @@ class Meeting(db.Model):
         self.highlights_json = json.dumps(result.get("highlights", []))
         self.chapters_json = json.dumps(result.get("chapters", []))
         self.action_items_json = json.dumps(result.get("action_items", []))
+        self.duration_seconds = result.get("duration_seconds")
         self.status = "done"
         self.error_message = None
 
@@ -57,8 +67,10 @@ class Meeting(db.Model):
         data = {
             "id": self.id,
             "meeting_title": self.title,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "created_at": _iso_utc(self.created_at),
             "status": self.status,
+            "source": self.source,
+            "duration_seconds": self.duration_seconds,
         }
         if self.status == "error":
             data["error_message"] = self.error_message

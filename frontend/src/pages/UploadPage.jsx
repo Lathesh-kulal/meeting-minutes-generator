@@ -159,6 +159,7 @@ export default function UploadPage() {
       formData.append('audio', file)
     }
     if (title) formData.append('title', title)
+    if (mode === 'record') formData.append('source', 'recording')
 
     setSubmitting(true)
     try {
