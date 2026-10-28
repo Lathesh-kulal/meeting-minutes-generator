@@ -54,5 +54,11 @@ def create_app():
 
     with app.app_context():
         db.create_all()
+        # Background jobs die with the server, so any meeting still marked
+        # "processing" at startup was interrupted. Mark it failed so it can be deleted.
+        from app.models import Meeting
+        for stuck in Meeting.query.filter_by(status="processing").all():
+            stuck.set_error("Processing was interrupted because the server stopped. Please upload again.")
+        db.session.commit()
 
     return app

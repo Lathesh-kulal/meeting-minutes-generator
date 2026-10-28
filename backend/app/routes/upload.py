@@ -14,6 +14,7 @@ from ..extensions import db, executor
 from ..models import Meeting
 from pipeline.pipeline_runner import run_pipeline
 from flask_login import login_required, current_user
+from ..running_jobs import mark_running, mark_done
 
 upload_bp = Blueprint("upload", __name__)
 
@@ -24,17 +25,27 @@ def _process_meeting(app, meeting_id: int, audio_path: str | None, raw_text: str
     context since it doesn't run inside the original request context.
     """
     with app.app_context():
-        meeting = db.session.get(Meeting, meeting_id)
-        if meeting is None:
-            return
         try:
             result = run_pipeline(audio_path=audio_path, raw_text=raw_text, meeting_title=title)
-            meeting.set_result(result)
+            error = None
         except Exception as exc:
-            meeting.set_error(str(exc))
+            result = None
+            error = str(exc)
+
+        try:
+            # Load the meeting again: the user may have deleted it while it was processing.
+            meeting = db.session.get(Meeting, meeting_id)
+            if meeting is not None:
+                if error is None:
+                    meeting.set_result(result)
+                else:
+                    meeting.set_error(error)
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
         finally:
-            db.session.commit()
-            # Clean up the temporary audio file now that processing is done.
+            mark_done(meeting_id)
+            # Clean up the temporary audio file now that processing is done
             if audio_path and os.path.exists(audio_path):
                 try:
                     os.remove(audio_path)
@@ -77,6 +88,7 @@ def create_meeting():
     db.session.commit()
 
     app = current_app._get_current_object()
+    mark_running(meeting.id)
     executor.submit(_process_meeting, app, meeting.id, audio_path, raw_text, title)
 
     return jsonify({"id": meeting.id, "status": "processing"}), 202

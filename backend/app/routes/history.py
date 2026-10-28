@@ -1,7 +1,7 @@
 """
 history.py
 GET    /api/meetings               — list all past meetings (most recent first).
-DELETE /api/meetings/<id>          — delete one meeting.
+DELETE /api/meetings/<id>          — delete one meeting (any status).
 PATCH  /api/meetings/<id>          — rename a meeting.
 POST   /api/meetings/bulk-delete   — delete several meetings at once.
 """
@@ -10,6 +10,7 @@ from flask_login import login_required, current_user
 
 from ..extensions import db
 from ..models import Meeting
+from ..running_jobs import is_running
 
 history_bp = Blueprint("history", __name__)
 
@@ -18,7 +19,14 @@ history_bp = Blueprint("history", __name__)
 @login_required
 def list_meetings():
     meetings = Meeting.query.filter_by(user_id=current_user.id).order_by(Meeting.created_at.desc()).all()
-    return jsonify([m.to_dict(include_full_result=False) for m in meetings])
+    out = []
+    for m in meetings:
+        d = m.to_dict(include_full_result=False)
+        # True only while a job is really running in the backend for this meeting.
+        d["is_active"] = m.status == "processing" and is_running(m.id)
+        out.append(d)
+    return jsonify(out)
+
 
 
 @history_bp.route("/api/meetings/<int:meeting_id>", methods=["DELETE"])
@@ -27,7 +35,7 @@ def delete_meeting(meeting_id):
     meeting = Meeting.query.filter_by(id=meeting_id, user_id=current_user.id).first()
     if meeting is None:
         return jsonify({"error": "Meeting not found."}), 404
-    if meeting.status == "processing":
+    if meeting.status == "processing" and is_running(meeting.id):
         return jsonify({"error": "This meeting is still processing. Try again once it finishes."}), 409
     db.session.delete(meeting)
     db.session.commit()
@@ -64,7 +72,7 @@ def bulk_delete_meetings():
 
     deleted, skipped = [], []
     for m in meetings:
-        if m.status == "processing":
+        if m.status == "processing" and is_running(m.id):
             skipped.append(m.id)
         else:
             deleted.append(m.id)

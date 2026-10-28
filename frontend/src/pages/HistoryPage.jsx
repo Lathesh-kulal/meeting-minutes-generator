@@ -25,6 +25,10 @@ function formatDuration(totalSeconds) {
   return `${s} s`
 }
 
+// True only while a job is really running in the backend for this meeting.
+// A row stuck on "processing" after a crash has is_active = false and can be deleted.
+const jobRunning = (m) => m.status === 'processing' && m.is_active
+
 export default function HistoryPage() {
   const [meetings, setMeetings] = useState([])
   const [error, setError] = useState('')
@@ -47,7 +51,7 @@ export default function HistoryPage() {
   const visible = meetings.filter((m) =>
     (m.meeting_title || '').toLowerCase().includes(query.trim().toLowerCase())
   )
-  const selectableIds = visible.filter((m) => m.status !== 'processing').map((m) => m.id)
+  const selectableIds = visible.filter((m) => !jobRunning(m)).map((m) => m.id)
   const allSelected =
     selectableIds.length > 0 && selectableIds.every((id) => selected.includes(id))
 
@@ -73,7 +77,7 @@ export default function HistoryPage() {
     setBusy(true)
     try {
       const res = await renameMeeting(m.id, title)
-      setMeetings((prev) => prev.map((x) => (x.id === m.id ? res.data : x)))
+      setMeetings((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...res.data } : x)))
     } catch (err) {
       setError(err.response?.data?.error || 'Could not rename the meeting.')
     } finally {
@@ -170,7 +174,7 @@ export default function HistoryPage() {
               aria-label={`Select ${m.meeting_title}`}
               checked={selected.includes(m.id)}
               onChange={() => toggleSelected(m.id)}
-              disabled={m.status === 'processing'}
+              disabled={jobRunning(m)}
             />
             <div className="hmain">
               {m.status === 'done' ? (
@@ -190,7 +194,7 @@ export default function HistoryPage() {
               <button
                 className="btn btn-danger btn-sm"
                 onClick={() => setDialog({ type: 'delete', meeting: m })}
-                disabled={m.status === 'processing'}
+                disabled={jobRunning(m)}
               >
                 Delete
               </button>
