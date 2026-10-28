@@ -9,6 +9,8 @@ import ResultsPage from './pages/ResultsPage.jsx'
 import HistoryPage from './pages/HistoryPage.jsx'
 import HomePage from './pages/HomePage.jsx'
 import Logo from './components/Logo.jsx'
+import { RecordingProvider } from './context/RecordingContext.jsx'
+import RecordingBar from './components/RecordingBar.jsx'
 
 function NavBar() {
   const { user, logout } = useAuth()
@@ -40,17 +42,20 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <NavBar />
-        <main>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/" element={<HomePage />} />
-          <Route path="/new" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
-          <Route path="/processing/:meetingId" element={<ProtectedRoute><ProcessingPage /></ProtectedRoute>} />
-          <Route path="/results/:meetingId" element={<ProtectedRoute><ResultsPage /></ProtectedRoute>} />
-          <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
-        </Routes>
-        </main>
+        <RecordingProvider>
+          <NavBar />
+          <RecordingBar />
+          <main>
+            <Routes>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/" element={<HomePage />} />
+              <Route path="/new" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
+              <Route path="/processing/:meetingId" element={<ProtectedRoute><ProcessingPage /></ProtectedRoute>} />
+              <Route path="/results/:meetingId" element={<ProtectedRoute><ResultsPage /></ProtectedRoute>} />
+              <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
+            </Routes>
+          </main>
+        </RecordingProvider>
       </AuthProvider>
     </BrowserRouter>
   )

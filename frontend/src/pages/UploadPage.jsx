@@ -1,134 +1,32 @@
-import React, { useState, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { uploadMeeting } from '../api/client'
+import { useRecording, formatTime } from '../context/RecordingContext.jsx'
 
 export default function UploadPage() {
-  const [mode, setMode] = useState('file') // 'file' | 'record' | 'text'
+  // The live recording lives in RecordingContext, so it keeps running if the
+  // user opens other pages while recording.
+  const rec = useRecording()
+  const location = useLocation()
+
+  // The recording bar links here with state { mode: 'record' }: a just-stopped
+  // recording's file arrives a moment after this page opens.
+  const [mode, setMode] = useState(() =>
+    location.state?.mode || (rec.isRecording || rec.recordedFile ? 'record' : 'file')
+  ) // 'file' | 'record' | 'text'
   const [file, setFile] = useState(null)
   const [transcriptText, setTranscriptText] = useState('')
-  const [title, setTitle] = useState('')
+  const { recordingTitle: title, setRecordingTitle: setTitle } = rec
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [over, setOver] = useState(false) // drag-and-drop hover state
 
-  const [isRecording, setIsRecording] = useState(false)
-  const [recordedInfo, setRecordedInfo] = useState('') // short label once a recording is ready
-  const [seconds, setSeconds] = useState(0)
-
-  const mediaRecorderRef = useRef(null)
-  const displayStreamRef = useRef(null)
-  const chunksRef = useRef([])
-  const timerRef = useRef(null)
-  const secondsRef = useRef(0)
-
   const navigate = useNavigate()
-
-  // Make sure capture is fully released if the user navigates away mid-recording.
-  useEffect(() => {
-    return () => {
-      stopCaptureTracks()
-      if (timerRef.current) clearInterval(timerRef.current)
-    }
-  }, [])
-
-  const stopCaptureTracks = () => {
-    if (displayStreamRef.current) {
-      displayStreamRef.current.getTracks().forEach((t) => t.stop())
-      displayStreamRef.current = null
-    }
-  }
-
-  const startRecording = async () => {
-    setError('')
-    setRecordedInfo('')
-
-    if (!navigator.mediaDevices?.getDisplayMedia) {
-      setError('Live recording is not supported in this browser. Try Chrome on desktop.')
-      return
-    }
-
-    let displayStream
-    try {
-      // video: true is required by the browser even though we only want audio —
-      // we drop the video track right after and only record the audio track.
-      displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true,
-      })
-    } catch (err) {
-      setError('Screen/tab share was cancelled or denied, so recording could not start.')
-      return
-    }
-
-    const audioTracks = displayStream.getAudioTracks()
-    if (audioTracks.length === 0) {
-      displayStream.getTracks().forEach((t) => t.stop())
-      setError(
-        'No audio was captured. When the share dialog opens, make sure to tick ' +
-        '"Share tab audio" (or "Share system audio") before confirming.'
-      )
-      return
-    }
-
-    displayStreamRef.current = displayStream
-
-    // If the user stops sharing from the browser's own UI (not our Stop button),
-    // treat that the same as pressing Stop. stopRecording() is safe to call twice.
-    displayStream.getVideoTracks()[0].onended = () => {
-      stopRecording()
-    }
-
-    const audioOnlyStream = new MediaStream(audioTracks)
-    const recorder = new MediaRecorder(audioOnlyStream, { mimeType: 'audio/webm' })
-    chunksRef.current = []
-
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data)
-    }
-
-    recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-      const recordedFile = new File([blob], `live-recording-${Date.now()}.webm`, {
-        type: 'audio/webm',
-      })
-      setFile(recordedFile)
-      setRecordedInfo(`Recording ready (${formatTime(secondsRef.current)})`)
-      stopCaptureTracks()
-    }
-
-    mediaRecorderRef.current = recorder
-    recorder.start()
-    setIsRecording(true)
-    secondsRef.current = 0
-    setSeconds(0)
-    timerRef.current = setInterval(() => {
-      secondsRef.current += 1
-      setSeconds(secondsRef.current)
-    }, 1000)
-  }
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop()
-    }
-    if (timerRef.current) {
-      clearInterval(timerRef.current)
-      timerRef.current = null
-    }
-    setIsRecording(false)
-  }
-
-  const formatTime = (totalSeconds) => {
-    const m = Math.floor(totalSeconds / 60).toString().padStart(2, '0')
-    const s = (totalSeconds % 60).toString().padStart(2, '0')
-    return `${m}:${s}`
-  }
 
   const switchMode = (newMode) => {
     if (newMode === mode) return
-    if (isRecording) stopRecording()
+    // A running or finished recording is kept (see the bar at the top of the page).
     setFile(null)
-    setRecordedInfo('')
     setTranscriptText('')
     setError('')
     setMode(newMode)
@@ -138,12 +36,14 @@ export default function UploadPage() {
     e.preventDefault()
     setError('')
 
+    const uploadFile = mode === 'record' ? rec.recordedFile : file
+
     if (mode === 'text') {
       if (!transcriptText.trim()) {
         setError('Please paste a transcript before generating minutes.')
         return
       }
-    } else if (!file) {
+    } else if (!uploadFile) {
       setError(
         mode === 'file'
           ? 'Please choose an audio/video/text file to upload.'
@@ -156,7 +56,7 @@ export default function UploadPage() {
     if (mode === 'text') {
       formData.append('text', transcriptText)
     } else {
-      formData.append('audio', file)
+      formData.append('audio', uploadFile)
     }
     if (title) formData.append('title', title)
     if (mode === 'record') formData.append('source', 'recording')
@@ -164,6 +64,8 @@ export default function UploadPage() {
     setSubmitting(true)
     try {
       const res = await uploadMeeting(formData)
+      if (mode === 'record') rec.discardRecording() // the recording has been uploaded
+      setTitle('') // the recording has been uploaded
       navigate(`/processing/${res.data.id}`)
     } catch (err) {
       setError(err.response?.data?.error || 'Upload failed. Please try again.')
@@ -223,22 +125,42 @@ export default function UploadPage() {
         )}
 
         {mode === 'record' && (
-          <div className={`rec ${isRecording ? 'live' : ''}`}>
+          <div className={`rec ${rec.isRecording ? 'live' : ''}`}>
             <p className="note">
-              Share the meeting's tab (or your whole screen) with audio on, and keep this
-              page open until the meeting ends.
+              Share the meeting's tab (or your whole screen) with audio on. Recording keeps
+              going while you switch tabs or open other pages here. To finish, use the Stop
+              button on the bar at the top of any page, or "Pop out controls" for a small
+              always-on-top window. Keep this browser tab open until the meeting ends.
             </p>
-            <div className="timer">{formatTime(seconds)}</div>
-            {!isRecording ? (
-              <button type="button" className="btn btn-primary" onClick={startRecording}>
-                <span className="dot" /> Start recording
+            <div className="timer">
+              {formatTime(rec.isRecording ? rec.seconds : rec.recordedSeconds)}
+            </div>
+            {!rec.isRecording ? (
+              <button type="button" className="btn btn-primary" onClick={rec.startRecording}>
+                <span className="dot" /> {rec.recordedFile ? 'Record again' : 'Start recording'}
               </button>
             ) : (
-              <button type="button" className="btn" onClick={stopRecording}>
+              <button type="button" className="btn" onClick={rec.stopRecording}>
                 <span className="dot" /> Stop recording
               </button>
             )}
-            {recordedInfo && <p className="ok-note">{recordedInfo}</p>}
+            {rec.recordedFile && !rec.isRecording && (
+              <>
+                <p className="ok-note">Recording ready ({formatTime(rec.recordedSeconds)})</p>
+                <button type="button" className="btn btn-sm" onClick={rec.discardRecording}>
+                  Discard recording
+                </button>
+              </>
+            )}
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={rec.autoGenerate}
+                onChange={(e) => rec.setAutoGenerate(e.target.checked)}
+              />
+              Generate minutes automatically when recording stops
+            </label>
+            {rec.error && <p className="alert" role="alert">{rec.error}</p>}
           </div>
         )}
 
@@ -258,7 +180,11 @@ export default function UploadPage() {
         )}
 
         {error && <p className="alert" role="alert">{error}</p>}
-        <button type="submit" className="btn btn-primary btn-wide" disabled={submitting || isRecording}>
+        <button
+          type="submit"
+          className="btn btn-primary btn-wide"
+          disabled={submitting || rec.generating || (mode === 'record' && rec.isRecording)}
+        >
           {submitting ? 'Uploading…' : 'Generate minutes'}
         </button>
       </form>
