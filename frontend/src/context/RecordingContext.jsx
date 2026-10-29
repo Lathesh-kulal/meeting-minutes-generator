@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from './AuthContext.jsx'
-import { uploadMeeting } from '../api/client'
+import { uploadMeeting, getMeetingStatus } from '../api/client'
 
 const RecordingContext = createContext(null)
 export const useRecording = () => useContext(RecordingContext)
@@ -11,6 +11,14 @@ export const formatTime = (totalSeconds) => {
     const s = (totalSeconds % 60).toString().padStart(2, '0')
     return `${m}:${s}`
 }
+
+// Name used when the user didn't type a title, e.g. "Meeting - 29 Oct, 10:04 am".
+export const defaultMeetingTitle = (date = new Date()) =>
+    `Meeting - ${date.toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}`
+
+const SILENCE_SECONDS = 20   // warn if no audio is heard for this long
+const COUNTDOWN_SECONDS = 5  // "Generating in 5s - Undo" after stopping
+const MIN_AUTO_SECONDS = 10  // shorter recordings are not generated automatically
 
 // Document Picture-in-Picture: a small always-on-top window (Chrome / Edge desktop).
 const pipSupported = typeof window !== 'undefined' && 'documentPictureInPicture' in window
@@ -30,12 +38,21 @@ export function RecordingProvider({ children }) {
     const [recordedSeconds, setRecordedSeconds] = useState(0)
     const [error, setError] = useState('')
     const [recordingTitle, setRecordingTitle] = useState('')
+    const [startedAt, setStartedAt] = useState(null)
     const [generating, setGenerating] = useState(false)
+    const [countdown, setCountdown] = useState(null) // seconds left before auto-generate, or null
+    const [silent, setSilent] = useState(false)      // no audio heard for a while
+    const [paused, setPaused] = useState(false)
+    const [shareEnded, setShareEnded] = useState(false) // the shared tab was closed / sharing stopped
     const [submittedId, setSubmittedId] = useState(null)
+    const [jobStatus, setJobStatus] = useState(null) // processing | done | error, for submittedId
     const [pipWindow, setPipWindow] = useState(null)
     const [starting, setStarting] = useState(false) // waiting for the user to pick what to share
     const [autoGenerate, setAutoGenerateState] = useState(() => {
-        try { return localStorage.getItem('autoGenerate') === '1' } catch { return false }
+        try {
+            const saved = localStorage.getItem('autoGenerate')
+            return saved === null ? true : saved === '1'
+        } catch { return true }
     })
 
     const recorderRef = useRef(null)
@@ -45,8 +62,12 @@ export function RecordingProvider({ children }) {
     const secondsRef = useRef(0)
     const autoRef = useRef(autoGenerate)
     const titleRef = useRef('')
+    const startedRef = useRef(null)
     const submitRef = useRef(null)
     const openPipRef = useRef(null)
+    const silenceRef = useRef(null)
+    const countdownRef = useRef(null)
+    const pausedRef = useRef(false)
     titleRef.current = recordingTitle
 
     const setAutoGenerate = (value) => {
@@ -62,6 +83,11 @@ export function RecordingProvider({ children }) {
         }
     }
 
+    const tick = () => {
+        secondsRef.current += 1
+        setSeconds(secondsRef.current)
+    }
+
     const releaseStream = () => {
         if (streamRef.current) {
             streamRef.current.getTracks().forEach((t) => t.stop())
@@ -69,20 +95,86 @@ export function RecordingProvider({ children }) {
         }
     }
 
+    // Watch the audio level; if nothing is heard for a while, tell the user.
+    const stopSilenceWatch = () => {
+        if (silenceRef.current) {
+            clearInterval(silenceRef.current.id)
+            silenceRef.current.ctx.close().catch(() => { })
+            silenceRef.current = null
+        }
+        setSilent(false)
+    }
+
+    const startSilenceWatch = (stream) => {
+        stopSilenceWatch()
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext
+            const ctx = new AudioCtx()
+            ctx.resume().catch(() => { })
+            const analyser = ctx.createAnalyser()
+            analyser.fftSize = 1024
+            ctx.createMediaStreamSource(stream).connect(analyser)
+            const data = new Uint8Array(analyser.fftSize)
+            let lastSound = Date.now()
+            const id = setInterval(() => {
+                if (pausedRef.current) {
+                    lastSound = Date.now()
+                    return
+                }
+                analyser.getByteTimeDomainData(data)
+                let peak = 0
+                for (let i = 0; i < data.length; i += 1) peak = Math.max(peak, Math.abs(data[i] - 128))
+                if (peak > 2) lastSound = Date.now()
+                setSilent(Date.now() - lastSound > SILENCE_SECONDS * 1000)
+            }, 500)
+            silenceRef.current = { ctx, id }
+        } catch {
+            /* detection is best-effort; recording works without it */
+        }
+    }
+
+    // "Generating in 5s - Undo": cancelling keeps the recording so it can be reviewed.
+    const clearCountdown = () => {
+        if (countdownRef.current) {
+            clearInterval(countdownRef.current)
+            countdownRef.current = null
+        }
+        setCountdown(null)
+    }
+
+    const startCountdown = (file) => {
+        clearCountdown()
+        let left = COUNTDOWN_SECONDS
+        setCountdown(left)
+        countdownRef.current = setInterval(() => {
+            left -= 1
+            if (left <= 0) {
+                clearCountdown()
+                submitRef.current(file)
+            } else {
+                setCountdown(left)
+            }
+        }, 1000)
+    }
+
     // Upload a finished recording and go to its processing page.
     const submitRecording = useCallback(async (file) => {
+        clearCountdown()
         setGenerating(true)
         setError('')
         try {
             const formData = new FormData()
             formData.append('audio', file)
-            if (titleRef.current) formData.append('title', titleRef.current)
+            formData.append('title', titleRef.current.trim() || defaultMeetingTitle(startedRef.current || new Date()))
             formData.append('source', 'recording')
             const res = await uploadMeeting(formData)
             setRecordedFile(null)
             setRecordedSeconds(0)
             setSeconds(0)
             setRecordingTitle('')
+            setStartedAt(null)
+            setShareEnded(false)
+            setJobStatus('processing')
             setSubmittedId(res.data.id)
             navigate(`/processing/${res.data.id}`)
         } catch (err) {
@@ -105,14 +197,41 @@ export function RecordingProvider({ children }) {
     // Safe to call more than once.
     const stopRecording = useCallback(() => {
         clearTimer()
+        stopSilenceWatch()
+        pausedRef.current = false
+        setPaused(false)
         const recorder = recorderRef.current
         if (recorder && recorder.state !== 'inactive') recorder.stop()
         setIsRecording(false)
     }, [])
 
+    // Pause / resume (for breaks). The timer and the recording both stand still.
+    const pauseRecording = useCallback(() => {
+        const recorder = recorderRef.current
+        if (!recorder || recorder.state !== 'recording') return
+        recorder.pause()
+        clearTimer()
+        pausedRef.current = true
+        setPaused(true)
+    }, [])
+
+    const resumeRecording = useCallback(() => {
+        const recorder = recorderRef.current
+        if (!recorder || recorder.state !== 'paused') return
+        recorder.resume()
+        pausedRef.current = false
+        setPaused(false)
+        timerRef.current = setInterval(tick, 1000)
+    }, [])
+
     // Stop and throw the recording away.
     const discardRecording = useCallback(() => {
         clearTimer()
+        clearCountdown()
+        stopSilenceWatch()
+        pausedRef.current = false
+        setPaused(false)
+        setShareEnded(false)
         const recorder = recorderRef.current
         if (recorder) {
             recorder.discarded = true
@@ -124,6 +243,7 @@ export function RecordingProvider({ children }) {
         setSeconds(0)
         setRecordedFile(null)
         setRecordedSeconds(0)
+        setStartedAt(null)
     }, [])
 
     const startRecording = useCallback(async () => {
@@ -131,8 +251,11 @@ export function RecordingProvider({ children }) {
         // Open the always-on-top controls straight away: browsers only allow this right
         // after a click, and the share dialog below can take longer than that.
         if (pipSupported && openPipRef.current) openPipRef.current()
+        clearCountdown()
+        setShareEnded(false)
         setError('')
         setSubmittedId(null)
+        setJobStatus(null)
         setRecordedFile(null)
         setRecordedSeconds(0)
 
@@ -168,9 +291,14 @@ export function RecordingProvider({ children }) {
         setStarting(false)
 
         // If the user clicks the browser's own "Stop sharing" button, treat it as Stop.
-        displayStream.getVideoTracks()[0].onended = () => stopRecording()
+        // ('ended' only fires when the browser or the tab ends the share, not when we stop it.)
+        displayStream.getVideoTracks()[0].onended = () => {
+            setShareEnded(true)
+            stopRecording()
+        }
 
-        const recorder = new MediaRecorder(new MediaStream(audioTracks), { mimeType: 'audio/webm' })
+        const audioStream = new MediaStream(audioTracks)
+        const recorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' })
         chunksRef.current = []
 
         recorder.ondataavailable = (e) => {
@@ -179,31 +307,33 @@ export function RecordingProvider({ children }) {
 
         recorder.onstop = () => {
             releaseStream()
+            stopSilenceWatch()
             if (recorder.discarded) return
             const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
             const file = new File([blob], `live-recording-${Date.now()}.webm`, { type: 'audio/webm' })
+            const length = secondsRef.current
             setRecordedFile(file)
-            setRecordedSeconds(secondsRef.current)
-            // "Generate minutes automatically when recording stops"
-            if (autoRef.current) submitRef.current(file)
+            setRecordedSeconds(length)
+            // Generate automatically (with a short Undo), unless it is suspiciously short.
+            if (autoRef.current && length >= MIN_AUTO_SECONDS) startCountdown(file)
         }
 
         recorderRef.current = recorder
         recorder.start()
+        startedRef.current = new Date()
+        setStartedAt(startedRef.current)
         secondsRef.current = 0
         setSeconds(0)
         setIsRecording(true)
-        timerRef.current = setInterval(() => {
-            secondsRef.current += 1
-            setSeconds(secondsRef.current)
-        }, 1000)
+        startSilenceWatch(audioStream)
+        timerRef.current = setInterval(tick, 1000)
     }, [stopRecording])
 
     // Open the always-on-top controls window. Must be called from a click.
     const openPip = useCallback(async () => {
         if (!pipSupported || pipWindow) return
         try {
-            const win = await window.documentPictureInPicture.requestWindow({ width: 360, height: 240 })
+            const win = await window.documentPictureInPicture.requestWindow({ width: 460, height: 150 })
             // Copy the app's styles so the small window looks the same.
             Array.from(document.styleSheets).forEach((sheet) => {
                 try {
@@ -233,6 +363,38 @@ export function RecordingProvider({ children }) {
         setPipWindow(null)
     }, [pipWindow])
 
+    // "Open minutes" button in the pop-out window: bring the user to the finished meeting.
+    const openMinutes = () => {
+        try { window.focus() } catch { /* the browser may refuse; the page still changes */ }
+        if (submittedId) navigate(`/results/${submittedId}`)
+        closePip()
+    }
+
+    // After uploading, follow the meeting's status so the pop-out can say when it is ready.
+    useEffect(() => {
+        if (!submittedId) return undefined
+        let cancelled = false
+        let timer = null
+        const poll = async () => {
+            try {
+                const res = await getMeetingStatus(submittedId)
+                if (cancelled) return
+                if (res.data.status === 'done' || res.data.status === 'error') {
+                    setJobStatus(res.data.status)
+                    return
+                }
+            } catch {
+                /* keep trying */
+            }
+            timer = setTimeout(poll, 3000)
+        }
+        poll()
+        return () => {
+            cancelled = true
+            clearTimeout(timer)
+        }
+    }, [submittedId])
+
     // Logging out (or the session ending) discards any recording.
     useEffect(() => {
         if (!user) discardRecording()
@@ -252,6 +414,8 @@ export function RecordingProvider({ children }) {
     // Release the screen share if the whole app goes away.
     useEffect(() => () => {
         clearTimer()
+        clearCountdown()
+        stopSilenceWatch()
         releaseStream()
     }, [])
 
@@ -263,15 +427,25 @@ export function RecordingProvider({ children }) {
         error,
         recordingTitle,
         setRecordingTitle,
+        startedAt,
         generating,
+        countdown,
+        undoGenerate: clearCountdown,
+        silent,
+        paused,
+        shareEnded,
+        pauseRecording,
+        resumeRecording,
         starting,
         submittedId,
+        jobStatus,
         autoGenerate,
         setAutoGenerate,
         pipSupported,
         pipWindow,
         openPip,
         closePip,
+        openMinutes,
         startRecording,
         stopRecording,
         discardRecording,

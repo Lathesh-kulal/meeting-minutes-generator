@@ -1520,3 +1520,138 @@ input[type="checkbox"] {
 .pip .field {
   width: 100%
 }
+
+/* Pop-out refinements */
+.pip-timer {
+  font: 700 2.4rem/1 var(--sans);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.03em
+}
+
+.pip .alert {
+  font-size: .9rem;
+  text-align: left
+}
+
+.linkbtn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  font: inherit;
+  font-size: .9rem;
+  cursor: pointer
+}
+
+.recbar-warn {
+  background: var(--hl);
+  color: var(--ink);
+  padding: .15rem .6rem;
+  border-radius: 999px;
+  font-weight: 600
+}
+
+.pip-timer {
+  font: 700 2.4rem/1 var(--sans);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.03em
+}
+
+.pip .alert {
+  font-size: .9rem;
+  text-align: left
+}
+
+.linkbtn {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  font: inherit;
+  font-size: .9rem;
+  cursor: pointer
+}
+
+.recbar-warn {
+  background: var(--hl);
+  color: var(--ink);
+  padding: .15rem .6rem;
+  border-radius: 999px;
+  font-weight: 600
+}
+
+.pip {
+  min-height: 100vh;
+  align-content: center
+}
+
+/* Compact, wide pop-out */
+.pip {
+  display: grid;
+  gap: .5rem;
+  justify-items: stretch;
+  align-content: center;
+  min-height: 100vh;
+  padding: .7rem .9rem;
+  text-align: left
+}
+
+.pip p {
+  margin: 0;
+  font-size: .95rem
+}
+
+.pip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .6rem;
+  flex-wrap: wrap
+}
+
+.pip-status {
+  display: flex;
+  align-items: center;
+  gap: .6rem
+}
+
+.pip-timer {
+  font: 700 1.5rem/1 var(--sans);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em
+}
+
+.pip-btns {
+  display: flex;
+  gap: .5rem
+}
+
+.pip .field {
+  padding: .4rem .65rem;
+  font-size: .9rem
+}
+
+.pip .alert {
+  font-size: .82rem;
+  padding: .35rem .6rem
+}
+
+.pip .btn {
+  padding: .45rem .9rem;
+  font-size: .95rem
+}
+
+.linkbtn.danger {
+  color: var(--red)
+}
+
+.dot.paused {
+  background: var(--ink-soft);
+  animation: none
+}
+
+.pip .linkbtn {
+  justify-self: start
+}

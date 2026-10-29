@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { uploadMeeting } from '../api/client'
-import { useRecording, formatTime } from '../context/RecordingContext.jsx'
+import { useRecording, formatTime, defaultMeetingTitle } from '../context/RecordingContext.jsx'
 
 export default function UploadPage() {
   // The live recording lives in RecordingContext, so it keeps running if the
@@ -58,14 +58,18 @@ export default function UploadPage() {
     } else {
       formData.append('audio', uploadFile)
     }
-    if (title) formData.append('title', title)
+    if (title) {
+      formData.append('title', title)
+    } else if (mode === 'record') {
+      formData.append('title', defaultMeetingTitle(rec.startedAt || new Date()))
+    }
     if (mode === 'record') formData.append('source', 'recording')
 
     setSubmitting(true)
     try {
       const res = await uploadMeeting(formData)
       if (mode === 'record') rec.discardRecording() // the recording has been uploaded
-      setTitle('') // the recording has been uploaded
+      setTitle('')
       navigate(`/processing/${res.data.id}`)
     } catch (err) {
       setError(err.response?.data?.error || 'Upload failed. Please try again.')
@@ -125,12 +129,12 @@ export default function UploadPage() {
         )}
 
         {mode === 'record' && (
-          <div className={`rec ${rec.isRecording ? 'live' : ''}`}>
+          <div className={`rec ${rec.isRecording && !rec.paused ? 'live' : ''}`}>
             <p className="note">
               Share the meeting's tab (or your whole screen) with audio on. Recording keeps
-              going while you switch tabs or open other pages here. To finish, use the Stop
-              button on the bar at the top of any page, or "Pop out controls" for a small
-              always-on-top window. Keep this browser tab open until the meeting ends.
+              going while you switch tabs or open other pages here; use the Stop button on the
+              bar at the top of any page (or "Pop out controls" for a small always-on-top window) to finish. Keep this browser tab open until the
+              meeting ends.
             </p>
             <div className="timer">
               {formatTime(rec.isRecording ? rec.seconds : rec.recordedSeconds)}
@@ -140,14 +144,48 @@ export default function UploadPage() {
                 <span className="dot" /> {rec.recordedFile ? 'Record again' : 'Start recording'}
               </button>
             ) : (
-              <button type="button" className="btn" onClick={rec.stopRecording}>
-                <span className="dot" /> Stop recording
-              </button>
+              <div className="row-actions">
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={rec.paused ? rec.resumeRecording : rec.pauseRecording}
+                >
+                  {rec.paused ? 'Resume' : 'Pause'}
+                </button>
+                <button type="button" className="btn" onClick={rec.stopRecording}>
+                  <span className="dot" /> Stop recording
+                </button>
+              </div>
             )}
-            {rec.recordedFile && !rec.isRecording && (
+            {rec.shareEnded && !rec.isRecording && (
+              <p className="note">The shared tab was closed or sharing was stopped, so the recording ended.</p>
+            )}
+            {rec.countdown !== null && (
+              <>
+                <p className="ok-note">Generating minutes in {rec.countdown}s…</p>
+                <button type="button" className="btn btn-sm" onClick={rec.undoGenerate}>Undo</button>
+              </>
+            )}
+            {rec.silent && rec.isRecording && (
+              <p className="alert" role="alert">
+                No audio heard for 20 seconds. Did you tick “Share tab audio”, and is the meeting unmuted?
+              </p>
+            )}
+            {rec.recordedFile && !rec.isRecording && rec.countdown === null && (
               <>
                 <p className="ok-note">Recording ready ({formatTime(rec.recordedSeconds)})</p>
-                <button type="button" className="btn btn-sm" onClick={rec.discardRecording}>
+                {rec.recordedSeconds < 10 && (
+                  <p className="note">That is a very short recording, so it was not generated automatically.</p>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => {
+                    if (window.confirm(`Discard this ${formatTime(rec.recordedSeconds)} recording?`)) {
+                      rec.discardRecording()
+                    }
+                  }}
+                >
                   Discard recording
                 </button>
               </>
@@ -158,7 +196,7 @@ export default function UploadPage() {
                 checked={rec.autoGenerate}
                 onChange={(e) => rec.setAutoGenerate(e.target.checked)}
               />
-              Generate minutes automatically when recording stops
+              Generate minutes automatically when recording stops (with a 5-second Undo)
             </label>
             {rec.error && <p className="alert" role="alert">{rec.error}</p>}
           </div>
@@ -183,7 +221,7 @@ export default function UploadPage() {
         <button
           type="submit"
           className="btn btn-primary btn-wide"
-          disabled={submitting || rec.generating || (mode === 'record' && rec.isRecording)}
+          disabled={submitting || rec.generating || rec.countdown !== null || (mode === 'record' && rec.isRecording)}
         >
           {submitting ? 'Uploading…' : 'Generate minutes'}
         </button>
