@@ -15,7 +15,7 @@ export default function RecordingBar() {
     const navigate = useNavigate()
 
     // Close the pop-out window a few seconds after there is nothing left to show.
-    const idle = !rec.isRecording && !rec.recordedFile && !rec.generating
+    const idle = !rec.isRecording && !rec.recordedFile && !rec.generating && !rec.starting
     useEffect(() => {
         if (!rec.pipWindow || !idle) return undefined
         const t = setTimeout(rec.closePip, 3500)

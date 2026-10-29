@@ -33,6 +33,7 @@ export function RecordingProvider({ children }) {
     const [generating, setGenerating] = useState(false)
     const [submittedId, setSubmittedId] = useState(null)
     const [pipWindow, setPipWindow] = useState(null)
+    const [starting, setStarting] = useState(false) // waiting for the user to pick what to share
     const [autoGenerate, setAutoGenerateState] = useState(() => {
         try { return localStorage.getItem('autoGenerate') === '1' } catch { return false }
     })
@@ -45,6 +46,7 @@ export function RecordingProvider({ children }) {
     const autoRef = useRef(autoGenerate)
     const titleRef = useRef('')
     const submitRef = useRef(null)
+    const openPipRef = useRef(null)
     titleRef.current = recordingTitle
 
     const setAutoGenerate = (value) => {
@@ -126,6 +128,9 @@ export function RecordingProvider({ children }) {
 
     const startRecording = useCallback(async () => {
         if (recorderRef.current && recorderRef.current.state !== 'inactive') return
+        // Open the always-on-top controls straight away: browsers only allow this right
+        // after a click, and the share dialog below can take longer than that.
+        if (pipSupported && openPipRef.current) openPipRef.current()
         setError('')
         setSubmittedId(null)
         setRecordedFile(null)
@@ -136,12 +141,14 @@ export function RecordingProvider({ children }) {
             return
         }
 
+        setStarting(true)
         let displayStream
         try {
             // video: true is required by the browser even though we only want audio —
             // we drop the video track and only record the audio track.
             displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
         } catch (err) {
+            setStarting(false)
             setError('Screen/tab share was cancelled or denied, so recording could not start.')
             return
         }
@@ -149,6 +156,7 @@ export function RecordingProvider({ children }) {
         const audioTracks = displayStream.getAudioTracks()
         if (audioTracks.length === 0) {
             displayStream.getTracks().forEach((t) => t.stop())
+            setStarting(false)
             setError(
                 'No audio was captured. When the share dialog opens, make sure to tick ' +
                 '"Share tab audio" (or "Share system audio") before confirming.'
@@ -157,6 +165,7 @@ export function RecordingProvider({ children }) {
         }
 
         streamRef.current = displayStream
+        setStarting(false)
 
         // If the user clicks the browser's own "Stop sharing" button, treat it as Stop.
         displayStream.getVideoTracks()[0].onended = () => stopRecording()
@@ -194,7 +203,7 @@ export function RecordingProvider({ children }) {
     const openPip = useCallback(async () => {
         if (!pipSupported || pipWindow) return
         try {
-            const win = await window.documentPictureInPicture.requestWindow({ width: 340, height: 170 })
+            const win = await window.documentPictureInPicture.requestWindow({ width: 360, height: 240 })
             // Copy the app's styles so the small window looks the same.
             Array.from(document.styleSheets).forEach((sheet) => {
                 try {
@@ -216,6 +225,8 @@ export function RecordingProvider({ children }) {
             setError('Could not open the pop-out window in this browser.')
         }
     }, [pipWindow])
+
+    openPipRef.current = openPip
 
     const closePip = useCallback(() => {
         if (pipWindow) pipWindow.close()
@@ -253,6 +264,7 @@ export function RecordingProvider({ children }) {
         recordingTitle,
         setRecordingTitle,
         generating,
+        starting,
         submittedId,
         autoGenerate,
         setAutoGenerate,
