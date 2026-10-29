@@ -1655,3 +1655,9 @@ input[type="checkbox"] {
 .pip .linkbtn {
   justify-self: start
 }
+
+.rec .check {
+  white-space: normal;
+  text-align: left;
+  align-items: flex-start
+}
