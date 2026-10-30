@@ -41,7 +41,7 @@ export default function RecordingBar() {
                 <span className="dot" />
                 <strong>{rec.paused ? 'Paused' : 'Recording'}</strong>
                 <span className="recbar-time">{formatTime(rec.seconds)}</span>
-                {rec.silent && <span className="recbar-warn">No audio heard. Tick “Share tab audio”</span>}
+                {rec.silent && <span className="recbar-warn">{rec.kindText.silenceShort}</span>}
                 <button
                     type="button"
                     className="btn btn-sm"
@@ -67,7 +67,7 @@ export default function RecordingBar() {
             <div className="recbar ready" role="status">
                 <strong>Generating minutes in {rec.countdown}s…</strong>
                 <button type="button" className="btn btn-sm" onClick={rec.undoGenerate}>Undo</button>
-                {rec.shareEnded && <span>The shared tab was closed, so recording ended.</span>}
+                {rec.shareEnded && <span>{rec.kindText.endedShort}</span>}
             </div>
         )
     } else if (rec.generating) {
@@ -81,7 +81,7 @@ export default function RecordingBar() {
         bar = (
             <div className="recbar ready" role="status">
                 <strong>Recording ready</strong>
-                {rec.shareEnded && <span>The shared tab was closed, so recording ended.</span>}
+                {rec.shareEnded && <span>{rec.kindText.endedShort}</span>}
                 <span className="recbar-time">{formatTime(rec.recordedSeconds)}</span>
                 <button type="button" className="btn btn-sm" onClick={rec.generateRecording}>Generate minutes</button>
                 <Link className="btn btn-sm" to="/new" state={{ mode: 'record' }}>Review</Link>

@@ -18,16 +18,14 @@ export default function RecordingPip() {
         />
     )
 
-    const endedNote = rec.shareEnded && (
-        <p className="muted">The shared tab was closed or sharing was stopped, so the recording ended.</p>
-    )
+    const endedNote = rec.shareEnded && <p className="muted">{rec.kindText.ended}</p>
 
     let body
     if (rec.starting) {
         body = (
             <p>
-                <strong>Choose what to share…</strong>{' '}
-                <span className="muted">Pick your meeting tab and tick “Share tab audio”.</span>
+                <strong>{rec.kindText.starting}</strong>{' '}
+                <span className="muted">{rec.kindText.startingHint}</span>
             </p>
         )
     } else if (rec.isRecording) {
@@ -55,7 +53,7 @@ export default function RecordingPip() {
                 {titleInput}
                 {rec.silent && (
                     <p className="alert" role="alert">
-                        No audio heard for 20 s. Tick “Share tab audio” and check the meeting isn’t muted.
+                        {rec.kindText.silence}
                     </p>
                 )}
             </>

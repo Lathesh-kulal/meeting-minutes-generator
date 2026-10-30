@@ -76,7 +76,10 @@ def create_meeting():
             audio_path = os.path.join(current_app.config["UPLOAD_FOLDER"], unique_name)
             audio_file.save(audio_path)
             # The Upload page tells us when the audio came from live recording.
-            source = "recording" if request.form.get("source") == "recording" else "audio_file"
+            # The Upload page tells us when the audio came from a live recording
+            # ("recording" = online meeting, "in_person" = microphone).
+            client_source = request.form.get("source")
+            source = client_source if client_source in ("recording", "in_person") else "audio_file"
 
     meeting = Meeting(
         title=title or "Untitled Meeting",
