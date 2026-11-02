@@ -9,6 +9,7 @@ from collections import Counter
 
 import spacy
 from transformers import pipeline
+import re
 
 _MODEL_NAME = "facebook/bart-large-cnn"
 _summarizer = None
@@ -138,7 +139,7 @@ def summarize_chapters(chapters: list[dict]) -> list[dict]:
     """
     enriched = []
     for ch in chapters:
-        summary = _safe_summarize(ch["text"])
+        summary = ground_names(_safe_summarize(ch["text"]), ch["text"])
         enriched.append({
             "chapter_id": ch["chapter_id"],
             "title": _make_title(ch["text"]),
@@ -148,20 +149,168 @@ def summarize_chapters(chapters: list[dict]) -> list[dict]:
     return enriched
 
 
-def generate_highlights(full_text: str, num_highlights: int = 5) -> list[str]:
+_SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
+_FIRST_PERSON = re.compile(
+    r"^(i\b|i'm\b|i've\b|i'd\b|in my opinion\b|personally\b|my\b)", re.I)
+_LEAD_CONJ = re.compile(r"^(but|and|so|well|also)\s+", re.I)
+_QUOTE_TAIL = re.compile(r"\b(he|she|they)\s+says?\W*$", re.I)
+
+
+_OPINION = re.compile(r",?\s*\b(in my opinion|personally|i think|i feel)\b,?", re.I)
+_PRONOUN_START = re.compile(r"^(that|it|this|these|those|they)\b", re.I)
+_NAME_SEQ = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b")
+
+
+def ground_names(summary: str, source_text: str) -> str:
+    """Remove names BART invented: a capitalised multi-word name that is not in
+    the source text is cut back to the part(s) that are (e.g. "David Cameron" ->
+    "David" when the transcript only says "David"). If no part of the name is in
+    the source, the sentence containing it is dropped (when other text remains)."""
+    src = source_text.lower()
+
+    def fix(m):
+        name = m.group(0)
+        if name.lower() in src:
+            return name
+        kept = [t for t in name.split() if t.lower() in src]
+        return " ".join(kept) if kept else "\0"
+
+    out = _NAME_SEQ.sub(fix, summary)
+    if "\0" in out:
+        sents = [x for x in _split_sentences(out) if "\0" not in x]
+        out = " ".join(sents) if sents else out.replace("\0", "")
+    return out
+
+
+def _clean(s: str) -> str:
+    s = _OPINION.sub("", s) if " in my opinion" in s.lower() or s.lower().startswith("in my opinion") else s
+    s = _LEAD_CONJ.sub("", s.strip())
+    return s[:1].upper() + s[1:]
+
+
+def _is_poor(s: str) -> bool:
+    """Questions, quoted speech and first-person remarks make poor key points."""
+    t = s.strip()
+    return (t.endswith("?") or t[:1] in "\"'\u201c\u2018" or bool(_QUOTE_TAIL.search(t))
+            or bool(_FIRST_PERSON.match(t)))
+_embedder = None
+
+
+def _split_sentences(text: str) -> list[str]:
+    return [s.strip() for s in _SENT_SPLIT.split(text) if s.strip()]
+
+
+def _words(s: str) -> set:
+    return set(re.findall(r"[a-z0-9']+", s.lower()))
+
+
+def _is_duplicate(candidate: str, chosen: list[str], threshold: float = 0.6) -> bool:
+    cw = _words(candidate)
+    for other in chosen:
+        ow = _words(other)
+        if cw and ow and len(cw & ow) / len(cw | ow) >= threshold:
+            return True
+    return False
+
+
+def _get_embedder():
+    """MiniLM (same model as the action-item classifier); None if unavailable."""
+    global _embedder
+    if _embedder is None:
+        try:
+            from sentence_transformers import SentenceTransformer
+            _embedder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        except Exception:
+            _embedder = False
+    return _embedder or None
+
+
+def _score_sentences(sentences: list[str], embed=None) -> list[float]:
+    """Higher = more central to the meeting. embed: fn(list[str]) -> 2-D array."""
+    n = len(sentences)
+    base = [0.0] * n
+    try:
+        if embed is None:
+            model = _get_embedder()
+            embed = (lambda xs: model.encode(xs, normalize_embeddings=True)) if model else None
+        if embed is not None and n:
+            import numpy as np
+            vecs = np.asarray(embed(sentences), dtype=float)
+            norms = np.linalg.norm(vecs, axis=1, keepdims=True)
+            vecs = vecs / np.where(norms == 0, 1, norms)
+            centroid = vecs.mean(axis=0)
+            centroid = centroid / (np.linalg.norm(centroid) or 1)
+            base = [float(v) for v in vecs @ centroid]
+    except Exception:
+        base = [0.0] * n
+
+    scores = []
+    for s, b in zip(sentences, base):
+        wc = len(s.split())
+        score = b + 0.02 * min(wc, 25) / 25          # tiny length bonus (also the no-embedder fallback)
+        if _FIRST_PERSON.match(s):
+            score -= 0.15
+        if _PRONOUN_START.match(s):
+            score -= 0.10                              # "That would be a big project." lacks context
+        scores.append(score)
+    return scores
+
+
+def generate_highlights(full_text: str, num_highlights: int = 10,
+                        chapters: list[dict] | None = None, _embed=None) -> list[str]:
     """
-    Generates a short list of key-point highlights from the full transcript.
-    Uses the summarizer on the whole transcript, then splits into bullet-style
-    sentences.
+    Key points for the Highlights view, taken from the chapter summaries.
+    Every chapter contributes its best sentence first; remaining slots go to
+    the highest-scoring sentences overall (max 2 per chapter). Fragments
+    ("...", under 6 words) and near-duplicates are skipped. Output keeps
+    meeting order. Falls back to the old whole-transcript summary when fewer
+    than 3 points result.
     """
-    summary = _safe_summarize(full_text, max_length=150, min_length=40)
+    points: list[str] = []
 
-    import re
-    sentences = re.split(r"(?<=[.!?])\s+", summary)
-    sentences = [s.strip() for s in sentences if s.strip()]
-    return sentences[:num_highlights]
+    if chapters:
+        cands = []                                     # (chapter_idx, pos, sentence)
+        for ci, ch in enumerate(chapters):
+            for pos, s in enumerate(_split_sentences(ch.get("summary", ""))):
+                s = _clean(s)
+                if len(s.split()) >= 6 and not s.rstrip().endswith(("...", "…")):
+                    cands.append((ci, pos, s))
+        good = [c for c in cands if not _is_poor(c[2])]
+        if len(good) >= 3:                             # otherwise keep everything
+            cands = good
 
+        if cands:
+            scores = _score_sentences([c[2] for c in cands], _embed)
+            ranked = sorted(zip(cands, scores), key=lambda x: x[1], reverse=True)
+            chosen, per_chapter = [], {}
 
+            def take(item):
+                (ci, pos, s), _ = item
+                if len(chosen) >= num_highlights or per_chapter.get(ci, 0) >= 2:
+                    return
+                if _is_duplicate(s, [c[2] for c in chosen]):
+                    return
+                chosen.append((ci, pos, s))
+                per_chapter[ci] = per_chapter.get(ci, 0) + 1
+
+            # Round 1: best sentence of each chapter (coverage), strongest chapters first
+            best = {}
+            for item in ranked:
+                best.setdefault(item[0][0], item)
+            for item in sorted(best.values(), key=lambda x: x[1], reverse=True):
+                take(item)
+            # Round 2: fill the remaining slots with the best of the rest
+            for item in ranked:
+                take(item)
+
+            chosen.sort(key=lambda c: (c[0], c[1]))
+            points = [c[2] for c in chosen]
+
+    if len(points) >= 3:
+        return points[:num_highlights]
+
+    summary = ground_names(_safe_summarize(full_text, max_length=150, min_length=40), full_text)
+    return _split_sentences(summary)[:5]
 if __name__ == "__main__":
     sample = (
         "Hello everyone, thank you guys for coming to our weekly student success meeting. "

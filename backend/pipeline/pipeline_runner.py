@@ -73,7 +73,7 @@ def run_pipeline(audio_path: str = None, raw_text: str = None, meeting_title: st
     print(f"[TIMING] summarize_chapters: {time.time() - t0:.1f}s")
 
     t0 = time.time()
-    highlights = summarize.generate_highlights(cleaned_text)
+    highlights = summarize.generate_highlights(cleaned_text, chapters=chapters)
     print(f"[TIMING] generate_highlights: {time.time() - t0:.1f}s")
 
     # Step 5: Action item extraction + enrichment
