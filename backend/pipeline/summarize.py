@@ -151,14 +151,36 @@ def summarize_chapters(chapters: list[dict]) -> list[dict]:
 
 _SENT_SPLIT = re.compile(r"(?<=[.!?])\s+")
 _FIRST_PERSON = re.compile(
-    r"^(i\b|i'm\b|i've\b|i'd\b|in my opinion\b|personally\b|my\b)", re.I)
+    r"^(i\b|i'm\b|i've\b|i'd\b|i'll\b|in my opinion\b|personally\b|my\b)", re.I)
 _LEAD_CONJ = re.compile(r"^(but|and|so|well|also)\s+", re.I)
 _QUOTE_TAIL = re.compile(r"\b(he|she|they)\s+says?\W*$", re.I)
-
-
 _OPINION = re.compile(r",?\s*\b(in my opinion|personally|i think|i feel)\b,?", re.I)
 _PRONOUN_START = re.compile(r"^(that|it|this|these|those|they)\b", re.I)
 _NAME_SEQ = re.compile(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b")
+# "David, I don't want..." (speech aimed at a person) and first-person remarks mid-sentence
+_VOCATIVE = re.compile(r"^[A-Z][a-z]+,\s")
+_SPEAKER_VOICE = re.compile(r"\b(my|our team can|i'll|i'd|i will|i'm|i've|let me|let's)\b", re.I)
+_FIRST_I = re.compile(r"\bI\b")                     # capital I anywhere: "If I submit ..."
+_CHATTER = re.compile(r"\b(thanks?|thank you|enjoy the|outstanding work|great work|good (morning|afternoon|evening)|"
+                      r"bye|cheers|see you|talk soon)\b", re.I)
+_embedder = None
+
+
+def _split_sentences(text: str) -> list[str]:
+    return [s.strip() for s in _SENT_SPLIT.split(text) if s.strip()]
+
+
+def _words(s: str) -> set:
+    return set(re.findall(r"[a-z0-9']+", s.lower()))
+
+
+def _is_duplicate(candidate: str, chosen: list[str], threshold: float = 0.6) -> bool:
+    cw = _words(candidate)
+    for other in chosen:
+        ow = _words(other)
+        if cw and ow and len(cw & ow) / len(cw | ow) >= threshold:
+            return True
+    return False
 
 
 def ground_names(summary: str, source_text: str) -> str:
@@ -183,34 +205,20 @@ def ground_names(summary: str, source_text: str) -> str:
 
 
 def _clean(s: str) -> str:
-    s = _OPINION.sub("", s) if " in my opinion" in s.lower() or s.lower().startswith("in my opinion") else s
+    if "in my opinion" in s.lower():
+        s = _OPINION.sub("", s)
     s = _LEAD_CONJ.sub("", s.strip())
     return s[:1].upper() + s[1:]
 
 
 def _is_poor(s: str) -> bool:
-    """Questions, quoted speech and first-person remarks make poor key points."""
+    """Questions, quoted speech, speech aimed at a person and first-person
+    remarks make poor key points."""
     t = s.strip()
-    return (t.endswith("?") or t[:1] in "\"'\u201c\u2018" or bool(_QUOTE_TAIL.search(t))
-            or bool(_FIRST_PERSON.match(t)))
-_embedder = None
-
-
-def _split_sentences(text: str) -> list[str]:
-    return [s.strip() for s in _SENT_SPLIT.split(text) if s.strip()]
-
-
-def _words(s: str) -> set:
-    return set(re.findall(r"[a-z0-9']+", s.lower()))
-
-
-def _is_duplicate(candidate: str, chosen: list[str], threshold: float = 0.6) -> bool:
-    cw = _words(candidate)
-    for other in chosen:
-        ow = _words(other)
-        if cw and ow and len(cw & ow) / len(cw | ow) >= threshold:
-            return True
-    return False
+    return (t.endswith("?") or t[:1] in "\"'“‘" or bool(_QUOTE_TAIL.search(t))
+            or bool(_FIRST_PERSON.match(t)) or bool(_VOCATIVE.match(t))
+            or bool(_SPEAKER_VOICE.search(t)) or bool(_FIRST_I.search(t)) or bool(_CHATTER.search(t))
+            or bool(_PRONOUN_START.match(t)))
 
 
 def _get_embedder():
@@ -256,17 +264,25 @@ def _score_sentences(sentences: list[str], embed=None) -> list[float]:
     return scores
 
 
-def generate_highlights(full_text: str, num_highlights: int = 10,
+def _default_cap(n_chapters: int) -> int:
+    """10 points for up to 10 chapters, then one per chapter up to 12."""
+    return 10 if n_chapters <= 10 else min(12, n_chapters)
+
+
+def generate_highlights(full_text: str, num_highlights: int | None = None,
                         chapters: list[dict] | None = None, _embed=None) -> list[str]:
     """
     Key points for the Highlights view, taken from the chapter summaries.
     Every chapter contributes its best sentence first; remaining slots go to
     the highest-scoring sentences overall (max 2 per chapter). Fragments
-    ("...", under 6 words) and near-duplicates are skipped. Output keeps
-    meeting order. Falls back to the old whole-transcript summary when fewer
-    than 3 points result.
+    ("...", under 6 words), questions, quoted or first-person speech and
+    near-duplicates are skipped. Output keeps meeting order. The cap grows
+    slightly with the number of chapters (see _default_cap). Falls back to the
+    old whole-transcript summary when fewer than 3 points result.
     """
     points: list[str] = []
+    if num_highlights is None:
+        num_highlights = _default_cap(len(chapters or []))
 
     if chapters:
         cands = []                                     # (chapter_idx, pos, sentence)
