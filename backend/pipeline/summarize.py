@@ -32,6 +32,43 @@ _GENERIC_MEETING_LEMMAS = {"meeting", "morning", "afternoon", "note", "thank",
                             "everyone", "today"}
 
 
+
+_SPEAKER_TAG = re.compile(r"(^|(?<=[.!?]\s))[A-Z][a-z]+:\s+")
+_GLUED_QUARTER = re.compile(r"\b(for|in|of|by|to|during|through)(Q[1-4])\b")
+_SENT_START_LOWER = re.compile(r"(^|(?<=[.!?]\s))([a-z])")
+
+
+def tidy_summary(s: str) -> str:
+    """Fixes BART artifacts: 'Sarah: ...' speaker tags and glued words like 'forQ4'."""
+    s = _GLUED_QUARTER.sub(r"\1 \2", s)
+    s = _SPEAKER_TAG.sub(lambda m: m.group(1), s)
+    s = _SENT_START_LOWER.sub(lambda m: m.group(1) + m.group(2).upper(), s)
+    return s.strip()
+
+
+_LEADING_DETERMINERS = ("the ", "a ", "an ", "my ", "our ", "your ", "their ", "his ", "her ", "its ")
+
+
+def clean_title_phrase(original: str) -> str:
+    """Prepares a noun-phrase for a chapter title: strips stray punctuation and
+    leading determiners/possessives. Returns '' if nothing useful is left."""
+    p = original.strip().strip(",.;:!?-–—\"'()[] ")
+    low = p.lower()
+    for d in _LEADING_DETERMINERS:
+        if low.startswith(d):
+            p = p[len(d):]
+            break
+    return p.strip(",.;:!?-–—\"'()[] ")
+
+
+def title_case_keep_acronyms(phrase: str) -> str:
+    """'internal QA team' -> 'Internal QA Team'; "court's power" -> "Court's Power"."""
+    out = []
+    for w in phrase.split():
+        out.append(w if any(c.isupper() for c in w) else w[:1].upper() + w[1:])
+    return " ".join(out)
+
+
 def _get_summarizer():
     global _summarizer
     if _summarizer is None:
@@ -90,6 +127,7 @@ def _make_title(chapter_text: str, max_phrases: int = 2) -> str:
         return lemma_or_text in generic_set or lemma_or_text.rstrip("s") in generic_set
 
     counts: Counter = Counter()
+    originals: dict = {}
     for chunk in doc.noun_chunks:
         if _overlaps_person(chunk):
             continue
@@ -104,14 +142,12 @@ def _make_title(chapter_text: str, max_phrases: int = 2) -> str:
         if any(tok.lemma_.lower() in _GENERIC_MEETING_LEMMAS for tok in chunk):
             continue
 
-        phrase = chunk.text.strip().lower()
-        for article in ("the ", "a ", "an "):
-            if phrase.startswith(article):
-                phrase = phrase[len(article):]
-                break
+        original = clean_title_phrase(chunk.text)
+        phrase = original.lower()
 
         if phrase and phrase not in _STOP_PHRASES:
             counts[phrase] += 1
+            originals.setdefault(phrase, original)
 
     if not counts:
         words = chapter_text.split()
@@ -124,7 +160,7 @@ def _make_title(chapter_text: str, max_phrases: int = 2) -> str:
     if len(top_phrases) < max_phrases:
         top_phrases += [p for p, _ in single_word[:max_phrases - len(top_phrases)]]
 
-    return " & ".join(phrase.title() for phrase in top_phrases)
+    return " & ".join(title_case_keep_acronyms(originals.get(p, p)) for p in top_phrases)
 
 
 def summarize_chapters(chapters: list[dict]) -> list[dict]:
@@ -139,7 +175,7 @@ def summarize_chapters(chapters: list[dict]) -> list[dict]:
     """
     enriched = []
     for ch in chapters:
-        summary = ground_names(_safe_summarize(ch["text"]), ch["text"])
+        summary = tidy_summary(ground_names(_safe_summarize(ch["text"]), ch["text"]))
         enriched.append({
             "chapter_id": ch["chapter_id"],
             "title": _make_title(ch["text"]),

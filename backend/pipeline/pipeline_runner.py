@@ -22,6 +22,7 @@ from . import segment
 from . import summarize
 from . import action_items
 from . import ner_utils
+from . import owners
 
 def run_pipeline(audio_path: str = None, raw_text: str = None, meeting_title: str = None) -> dict:
     duration_seconds = None
@@ -83,6 +84,9 @@ def run_pipeline(audio_path: str = None, raw_text: str = None, meeting_title: st
 
     t0 = time.time()
     enriched_action_items = ner_utils.enrich_action_items(raw_action_items)
+    enriched_action_items = owners.drop_ungrounded_items(enriched_action_items, cleaned_text)
+    enriched_action_items = owners.assign_owners(
+    enriched_action_items, sentences, pre.get("speakers", []))
     print(f"[TIMING] enrich_action_items: {time.time() - t0:.1f}s")
 
     return {
