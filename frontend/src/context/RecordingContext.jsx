@@ -20,6 +20,41 @@ const SILENCE_SECONDS = 20   // warn if no audio is heard for this long
 const COUNTDOWN_SECONDS = 5  // "Generating in 5s - Undo" after stopping
 const MIN_AUTO_SECONDS = 10  // shorter recordings are not generated automatically
 
+// Microphone settings for in-person meetings (browser audio processing). Easy to
+// experiment with: for a quiet room, turning noiseSuppression off can help distant voices.
+const MIC_CONSTRAINTS = { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+
+const micErrorMessage = (err) => {
+    if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+        return 'Microphone access was blocked. Allow it from the lock icon in the address bar, then try again.'
+    }
+    if (err && err.name === 'NotFoundError') {
+        return 'No microphone was found. Plug one in or check your system sound settings.'
+    }
+    return 'Could not start the microphone.'
+}
+
+// Wording that depends on what is being recorded: an online meeting (tab/screen audio)
+// or an in-person meeting (microphone).
+const KIND_TEXT = {
+    online: {
+        starting: 'Choose what to share…',
+        startingHint: 'Pick your meeting tab and tick “Share tab audio”.',
+        silence: 'No audio heard for 20 s. Tick “Share tab audio” and check the meeting isn’t muted.',
+        silenceShort: 'No audio heard. Tick “Share tab audio”',
+        ended: 'The shared tab was closed or sharing was stopped, so the recording ended.',
+        endedShort: 'The shared tab was closed, so recording ended.',
+    },
+    in_person: {
+        starting: 'Allow microphone access…',
+        startingHint: 'Choose “Allow” when your browser asks to use the microphone.',
+        silence: 'No sound heard for 20 s. Check your microphone, and that people are close enough to it.',
+        silenceShort: 'No sound heard. Check your microphone',
+        ended: 'The microphone stopped (it may have been unplugged), so the recording ended.',
+        endedShort: 'The microphone stopped, so recording ended.',
+    },
+}
+
 // Document Picture-in-Picture: a small always-on-top window (Chrome / Edge desktop).
 const pipSupported = typeof window !== 'undefined' && 'documentPictureInPicture' in window
 
@@ -43,6 +78,7 @@ export function RecordingProvider({ children }) {
     const [countdown, setCountdown] = useState(null) // seconds left before auto-generate, or null
     const [silent, setSilent] = useState(false)      // no audio heard for a while
     const [paused, setPaused] = useState(false)
+    const [activeKind, setActiveKind] = useState('online') // 'online' (tab audio) | 'in_person' (microphone)
     const [shareEnded, setShareEnded] = useState(false) // the shared tab was closed / sharing stopped
     const [submittedId, setSubmittedId] = useState(null)
     const [jobStatus, setJobStatus] = useState(null) // processing | done | error, for submittedId
@@ -68,6 +104,8 @@ export function RecordingProvider({ children }) {
     const silenceRef = useRef(null)
     const countdownRef = useRef(null)
     const pausedRef = useRef(false)
+    const activeKindRef = useRef('online')
+    const wakeRef = useRef(null)
     titleRef.current = recordingTitle
 
     const setAutoGenerate = (value) => {
@@ -93,6 +131,23 @@ export function RecordingProvider({ children }) {
             streamRef.current.getTracks().forEach((t) => t.stop())
             streamRef.current = null
         }
+    }
+
+    // Keep the screen awake while recording, so the laptop does not sleep mid-meeting.
+    const acquireWakeLock = async () => {
+        try {
+            if ('wakeLock' in navigator && !wakeRef.current) {
+                wakeRef.current = await navigator.wakeLock.request('screen')
+            }
+        } catch {
+            /* unsupported or refused: recording still works */
+        }
+    }
+
+    const releaseWakeLock = () => {
+        const lock = wakeRef.current
+        wakeRef.current = null
+        if (lock) lock.release().catch(() => { })
     }
 
     // Watch the audio level; if nothing is heard for a while, tell the user.
@@ -166,7 +221,7 @@ export function RecordingProvider({ children }) {
             const formData = new FormData()
             formData.append('audio', file)
             formData.append('title', titleRef.current.trim() || defaultMeetingTitle(startedRef.current || new Date()))
-            formData.append('source', 'recording')
+            formData.append('source', activeKindRef.current === 'in_person' ? 'in_person' : 'recording')
             const res = await uploadMeeting(formData)
             setRecordedFile(null)
             setRecordedSeconds(0)
@@ -198,6 +253,7 @@ export function RecordingProvider({ children }) {
     const stopRecording = useCallback(() => {
         clearTimer()
         stopSilenceWatch()
+        releaseWakeLock()
         pausedRef.current = false
         setPaused(false)
         const recorder = recorderRef.current
@@ -229,6 +285,7 @@ export function RecordingProvider({ children }) {
         clearTimer()
         clearCountdown()
         stopSilenceWatch()
+        releaseWakeLock()
         pausedRef.current = false
         setPaused(false)
         setShareEnded(false)
@@ -246,11 +303,12 @@ export function RecordingProvider({ children }) {
         setStartedAt(null)
     }, [])
 
-    const startRecording = useCallback(async () => {
+    const startRecording = useCallback(async (kind = 'online') => {
         if (recorderRef.current && recorderRef.current.state !== 'inactive') return
-        // Open the always-on-top controls straight away: browsers only allow this right
-        // after a click, and the share dialog below can take longer than that.
-        if (pipSupported && openPipRef.current) openPipRef.current()
+        // Online meetings: open the always-on-top controls straight away (browsers only allow
+        // this right after a click, and the share dialog below can take longer than that).
+        // In-person meetings: the user is at the laptop, so the pop-out is optional.
+        if (kind === 'online' && pipSupported && openPipRef.current) openPipRef.current()
         clearCountdown()
         setShareEnded(false)
         setError('')
@@ -258,41 +316,58 @@ export function RecordingProvider({ children }) {
         setJobStatus(null)
         setRecordedFile(null)
         setRecordedSeconds(0)
+        activeKindRef.current = kind
+        setActiveKind(kind)
 
-        if (!navigator.mediaDevices?.getDisplayMedia) {
-            setError('Live recording is not supported in this browser. Try Chrome on desktop.')
-            return
-        }
-
-        setStarting(true)
-        let displayStream
-        try {
-            // video: true is required by the browser even though we only want audio —
-            // we drop the video track and only record the audio track.
-            displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-        } catch (err) {
-            setStarting(false)
-            setError('Screen/tab share was cancelled or denied, so recording could not start.')
-            return
-        }
-
-        const audioTracks = displayStream.getAudioTracks()
-        if (audioTracks.length === 0) {
-            displayStream.getTracks().forEach((t) => t.stop())
-            setStarting(false)
+        const inPerson = kind === 'in_person'
+        const supported = inPerson
+            ? !!navigator.mediaDevices?.getUserMedia
+            : !!navigator.mediaDevices?.getDisplayMedia
+        if (!supported) {
             setError(
-                'No audio was captured. When the share dialog opens, make sure to tick ' +
-                '"Share tab audio" (or "Share system audio") before confirming.'
+                inPerson
+                    ? 'This browser cannot use the microphone here. Use a recent Chrome or Edge on localhost or https.'
+                    : 'Live recording is not supported in this browser. Try Chrome on desktop.'
             )
             return
         }
 
-        streamRef.current = displayStream
+        setStarting(true)
+        let captureStream
+        try {
+            captureStream = inPerson
+                ? await navigator.mediaDevices.getUserMedia({ audio: MIC_CONSTRAINTS })
+                // video: true is required by the browser even though we only want audio —
+                // we drop the video track and only record the audio track.
+                : await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+        } catch (err) {
+            setStarting(false)
+            setError(
+                inPerson ? micErrorMessage(err) : 'Screen/tab share was cancelled or denied, so recording could not start.'
+            )
+            return
+        }
+
+        const audioTracks = captureStream.getAudioTracks()
+        if (audioTracks.length === 0) {
+            captureStream.getTracks().forEach((t) => t.stop())
+            setStarting(false)
+            setError(
+                inPerson
+                    ? 'No microphone audio was available.'
+                    : 'No audio was captured. When the share dialog opens, make sure to tick ' +
+                    '"Share tab audio" (or "Share system audio") before confirming.'
+            )
+            return
+        }
+
+        streamRef.current = captureStream
         setStarting(false)
 
-        // If the user clicks the browser's own "Stop sharing" button, treat it as Stop.
-        // ('ended' only fires when the browser or the tab ends the share, not when we stop it.)
-        displayStream.getVideoTracks()[0].onended = () => {
+        // If the browser/tab ends the share, or the microphone is unplugged, treat it as Stop.
+        // ('ended' only fires then, not when we stop the tracks ourselves.)
+        const endedTrack = inPerson ? audioTracks[0] : captureStream.getVideoTracks()[0]
+        endedTrack.onended = () => {
             setShareEnded(true)
             stopRecording()
         }
@@ -326,6 +401,7 @@ export function RecordingProvider({ children }) {
         setSeconds(0)
         setIsRecording(true)
         startSilenceWatch(audioStream)
+        acquireWakeLock()
         timerRef.current = setInterval(tick, 1000)
     }, [stopRecording])
 
@@ -411,11 +487,26 @@ export function RecordingProvider({ children }) {
         return () => window.removeEventListener('beforeunload', warn)
     }, [isRecording, recordedFile])
 
+    // The browser drops the screen-awake lock when the tab is hidden; take it again on return.
+    useEffect(() => {
+        const onVisible = () => {
+            if (document.visibilityState !== 'visible') return
+            const recorder = recorderRef.current
+            if (recorder && recorder.state !== 'inactive') {
+                wakeRef.current = null
+                acquireWakeLock()
+            }
+        }
+        document.addEventListener('visibilitychange', onVisible)
+        return () => document.removeEventListener('visibilitychange', onVisible)
+    }, [])
+
     // Release the screen share if the whole app goes away.
     useEffect(() => () => {
         clearTimer()
         clearCountdown()
         stopSilenceWatch()
+        releaseWakeLock()
         releaseStream()
     }, [])
 
@@ -434,6 +525,8 @@ export function RecordingProvider({ children }) {
         silent,
         paused,
         shareEnded,
+        activeKind,
+        kindText: KIND_TEXT[activeKind],
         pauseRecording,
         resumeRecording,
         starting,

@@ -14,6 +14,7 @@ const SOURCE_LABEL = {
   audio_file: 'Audio file',
   pasted_text: 'Pasted text',
   text_file: 'Text file',
+  in_person: 'In-person',
 }
 
 function formatDuration(totalSeconds) {

@@ -15,6 +15,8 @@ export default function UploadPage() {
     location.state?.mode || (rec.isRecording || rec.recordedFile ? 'record' : 'file')
   ) // 'file' | 'record' | 'text'
   const [file, setFile] = useState(null)
+  // What to record: an online meeting (tab audio) or an in-person meeting (microphone).
+  const [kind, setKind] = useState(rec.activeKind)
   const [transcriptText, setTranscriptText] = useState('')
   const { recordingTitle: title, setRecordingTitle: setTitle } = rec
   const [error, setError] = useState('')
@@ -63,7 +65,7 @@ export default function UploadPage() {
     } else if (mode === 'record') {
       formData.append('title', defaultMeetingTitle(rec.startedAt || new Date()))
     }
-    if (mode === 'record') formData.append('source', 'recording')
+    if (mode === 'record') formData.append('source', rec.activeKind === 'in_person' ? 'in_person' : 'recording')
 
     setSubmitting(true)
     try {
@@ -130,17 +132,44 @@ export default function UploadPage() {
 
         {mode === 'record' && (
           <div className={`rec ${rec.isRecording && !rec.paused ? 'live' : ''}`}>
-            <p className="note">
-              Share the meeting's tab (or your whole screen) with audio on. Recording keeps
-              going while you switch tabs or open other pages here; use the Stop button on the
-              bar at the top of any page (or "Pop out controls" for a small always-on-top window) to finish. Keep this browser tab open until the
-              meeting ends.
-            </p>
+            <div className="seg" role="group" aria-label="Recording type">
+              <button
+                type="button"
+                aria-pressed={kind === 'online'}
+                disabled={rec.isRecording || rec.starting}
+                onClick={() => setKind('online')}
+              >
+                Online meeting
+              </button>
+              <button
+                type="button"
+                aria-pressed={kind === 'in_person'}
+                disabled={rec.isRecording || rec.starting}
+                onClick={() => setKind('in_person')}
+              >
+                In-person meeting
+              </button>
+            </div>
+            {(rec.isRecording ? rec.activeKind : kind) === 'online' ? (
+              <p className="note">
+                Share the meeting's tab (or your whole screen) with audio on. Recording keeps
+                going while you switch tabs or open other pages here; use the Stop button on the
+                bar at the top of any page (or "Pop out controls" for a small always-on-top
+                window) to finish. Keep this browser tab open until the meeting ends.
+              </p>
+            ) : (
+              <p className="note">
+                Records through your microphone. Put the laptop in the middle of the table, close
+                to the people speaking, and keep this tab open. Recording keeps going while you
+                open other pages here; use the Stop button on the bar at the top of any page to
+                finish. Please make sure everyone in the room agrees to be recorded.
+              </p>
+            )}
             <div className="timer">
               {formatTime(rec.isRecording ? rec.seconds : rec.recordedSeconds)}
             </div>
             {!rec.isRecording ? (
-              <button type="button" className="btn btn-primary" onClick={rec.startRecording}>
+              <button type="button" className="btn btn-primary" onClick={() => rec.startRecording(kind)}>
                 <span className="dot" /> {rec.recordedFile ? 'Record again' : 'Start recording'}
               </button>
             ) : (
@@ -158,7 +187,7 @@ export default function UploadPage() {
               </div>
             )}
             {rec.shareEnded && !rec.isRecording && (
-              <p className="note">The shared tab was closed or sharing was stopped, so the recording ended.</p>
+              <p className="note">{rec.kindText.ended}</p>
             )}
             {rec.countdown !== null && (
               <>
@@ -167,9 +196,7 @@ export default function UploadPage() {
               </>
             )}
             {rec.silent && rec.isRecording && (
-              <p className="alert" role="alert">
-                No audio heard for 20 seconds. Did you tick “Share tab audio”, and is the meeting unmuted?
-              </p>
+              <p className="alert" role="alert">{rec.kindText.silence}</p>
             )}
             {rec.recordedFile && !rec.isRecording && rec.countdown === null && (
               <>
